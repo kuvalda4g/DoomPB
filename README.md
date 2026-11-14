@@ -5,10 +5,11 @@ in **PureBasic**. The goal is to reproduce the behaviour of id Software's
 **Linux Doom 1.10** — software renderer, fixed-point arithmetic, 35 Hz game
 ticks and WAD compatibility — rather than to reimagine it.
 
-> **Status: `0.0.1` — M0 complete, M1-01 in progress.**
-> The executable can validate a WAD header and read its lump directory
-> (metadata only). Lump lookup, payload loading, `PLAYPAL`, `TITLEPIC`, the
-> renderer and gameplay are not implemented yet.
+> **Status: `0.0.1` — M0 and M1-01 complete, M1-02 in progress.**
+> The executable can validate a WAD header, read its lump directory, look up
+> lumps by name and read raw lump payloads through the WAD API (metadata only
+> from the CLI). `PLAYPAL`/`TITLEPIC` decoding, the renderer and gameplay are
+> not implemented yet.
 
 ## Legal notice
 
@@ -46,6 +47,9 @@ repository.
 # Build the synthetic WAD unit tests -> build/DoomPB-WadTests.exe
 ./scripts/build.ps1 -Test
 
+# Build the lookup/payload tests -> build/DoomPB-WadLumpTests.exe
+./scripts/build.ps1 -LumpTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -62,15 +66,18 @@ repository.
 # Build the synthetic WAD unit tests -> build/DoomPB-WadTests
 ./scripts/build.sh --test
 
+# Build the lookup/payload tests -> build/DoomPB-WadLumpTests
+./scripts/build.sh --lump-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, the synthetic WAD
-header/directory unit tests, and smoke tests against the produced executable.
-They need no game data and no graphical display.
+The test scripts run a real syntax check, a real build, both synthetic WAD test
+suites (header/directory and lump lookup/payload), and smoke tests against the
+produced executable. They need no game data and no graphical display.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -88,28 +95,52 @@ A test run fails with a non-zero exit code if any check fails.
 DoomPB --version                         Print the version and exit.
 DoomPB --help                            Print usage information and exit.
 DoomPB --iwad <path> --dump-info         Print WAD header/directory metadata.
+DoomPB --iwad <path> --lump-info <name>  Print one lump's index, offset and size.
 DoomPB                                   Print the bootstrap status and exit.
 ```
 
 `--dump-info` prints only container metadata (type, file size, lump count,
-directory offset). It never prints lump contents. A missing or malformed WAD is
+directory offset). `--lump-info` performs the same case-insensitive,
+last-duplicate-wins name lookup as the WAD API and prints metadata only. Neither
+option prints lump contents. A missing or malformed WAD, or a missing lump, is
 reported with a non-zero exit code.
 
 | Exit code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | WAD could not be opened or is invalid |
-| `2` | Usage error (unknown option, missing value, too many arguments) |
+| `1` | WAD could not be opened or is invalid, or the lump was not found |
+| `2` | Usage error (unknown option, missing value, conflicting actions) |
 
-Planned options such as `--file` and `--list-lumps`, plus lump lookup and payload
-loading, belong to milestone M1-02 and are **not implemented yet**.
+## WAD API
+
+`src/WAD/WAD.pbi` exposes the container readers used by later milestones:
+
+```text
+WADFindLump(Name)                     -> zero-based index, or -1
+WADReadLump(Index, Destination, Cap)  -> #True / #False
+```
+
+- Lookup compares exactly eight raw name bytes. The query is ASCII-uppercased
+  (`a`–`z` only), shorter names are NUL-padded, longer queries use their first
+  eight bytes, and the last matching directory entry wins. Stored name bytes are
+  never rewritten.
+- Reads use a caller-owned destination buffer (`AllocateMemory`/`FreeMemory`).
+  The caller guarantees `Capacity`, which must be nonnegative and at least the
+  lump size. Only the lump size is written, including arbitrary binary bytes.
+- Zero-length markers succeed without I/O and accept a null destination.
+- Each nonempty read reopens the WAD read-only, rejects a changed file size,
+  revalidates 64-bit bounds and closes the handle on every path. A short read
+  may leave the destination partially modified and is reported as an error.
+
+`PLAYPAL`, patch decoding and `TITLEPIC` belong to later M1 tasks and are
+**not implemented yet**.
 
 ## Repository layout
 
 ```text
 src/        PureBasic sources (DoomPB.pb is the entry point)
 src/Core/   shared primitives (little-endian decoding, later fixed-point math)
-src/WAD/    WAD container reader
+src/WAD/    WAD container reader, name lookup and payload reads
 tests/unit/ self-contained tests with synthetic, generated fixtures
 scripts/    build/test scripts for Windows (PowerShell) and Linux (Bash)
 docs/       development plan, porting notes and task descriptions

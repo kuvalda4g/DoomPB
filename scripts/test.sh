@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 #
-# Runs the DoomPB M0 verification suite on Linux/Unix.
+# Runs the DoomPB verification suite on Linux/Unix.
 #
 # Performs a real PureBasic syntax check, a real build, the synthetic WAD
-# header/directory unit tests, and smoke tests against the produced executable:
-# --version, --help, no-argument startup and unknown-option handling. No
-# commercial game data and no display are needed.
+# header/directory and lump lookup/payload unit tests, and smoke tests against
+# the produced executable: --version, --help, no-argument startup,
+# unknown-option handling and --lump-info argument validation. No commercial
+# game data and no display are needed.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -17,6 +18,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." >/dev/null 2>&1 && pwd)"
 BUILD_SCRIPT="${SCRIPT_DIR}/build.sh"
 BIN="${REPO_ROOT}/build/DoomPB"
 UNIT_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadTests"
+LUMP_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadLumpTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -134,6 +136,50 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+printf '\n== WAD lump lookup/payload test build ==\n'
+run_build --check --lump-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD lump test syntax check exits with 0\n'
+else
+    printf 'FAIL: WAD lump test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD lump test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --lump-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD lump test build exits with 0\n'
+else
+    printf 'FAIL: WAD lump test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD lump test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${LUMP_TEST_BIN}" ]; then
+    printf 'PASS: WAD lump test output exists: %s\n' "${LUMP_TEST_BIN}"
+else
+    printf 'FAIL: WAD lump test output missing: %s\n' "${LUMP_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD lump test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== WAD lump lookup/payload unit tests ==\n'
+"${LUMP_TEST_BIN}"
+lump_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${lump_status}" -eq 0 ]; then
+    printf 'PASS: synthetic WAD lump tests exit with 0\n'
+else
+    printf 'FAIL: synthetic WAD lump tests exit with %s\n' "${lump_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
 printf '\n== Smoke tests ==\n'
 
 check_case '--version exits with 0 and prints DoomPB 0.0.1' 0 '^DoomPB 0\.0\.1$' --version
@@ -154,6 +200,9 @@ fi
 check_case 'startup without arguments exits with 0' 0 'not implemented'
 check_case 'unknown option exits with 2' 2 'unknown option' --definitely-not-an-option
 check_case 'too many arguments exits with 2' 2 '' --version extra
+check_case '--lump-info without a name exits with 2' 2 '' --lump-info
+check_case 'missing WAD for --lump-info exits with 1' 1 '' --iwad definitely-missing-doompb.wad --lump-info PLAYPAL
+check_case '--dump-info with --lump-info exits with 2' 2 '' --dump-info --lump-info PLAYPAL
 
 printf '\n'
 if [ "${FAILURES}" -ne 0 ]; then

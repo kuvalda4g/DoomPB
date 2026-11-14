@@ -8,7 +8,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 | Milestone | State | Notes |
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
-| M1 — WAD loader and `TITLEPIC` | in progress | M1-01 (header/directory parser) implemented locally, not yet committed; lump lookup, `PLAYPAL` and `TITLEPIC` pending |
+| M1 — WAD loader and `TITLEPIC` | in progress | M1-01 committed as `1e5f7d5`; M1-02 (lookup/payload reads) implemented locally and not yet committed; `PLAYPAL`, patch decoding and `TITLEPIC` pending |
 
 `src/DoomPB.pb`, `src/Core/Endian.pbi` and `src/WAD/WAD.pbi` are original
 PureBasic code written for DoomPB. The WAD container parsing reproduces the
@@ -117,6 +117,80 @@ Verified behaviour:
   with 2,306 lumps and directory offset 12,371,396.
 - Synthetic tests `T01`–`T16` plus endian checks pass in a real compiled
   executable (`tests/unit/wad_header_tests.pb`).
+
+## M1-02 — lump lookup and payload reading
+
+Original C symbols consulted (same pinned revision):
+
+- `W_CheckNumForName` (`w_wad.c`): copies up to eight bytes with `strncpy`,
+  forces a terminator, uppercases the query, compares two 32-bit words and scans
+  the directory backwards.
+- `W_GetNumForName` (`w_wad.c`): calls the check and terminates with `I_Error`
+  when the name is absent.
+- `W_LumpLength` (`w_wad.c`): returns the directory size.
+- `W_ReadLump` (`w_wad.c`): reopens the reloadable file by `reloadname`, seeks,
+  reads the whole lump and reports a short read. `lumpinfo_t` stores the
+  position, size and optional handle.
+
+Port mapping:
+
+- `W_CheckNumForName` → `WADFindLump()` in `src/WAD/WAD.pbi`.
+- `W_GetNumForName` fatal exit → not ported: DoomPB returns `-1` with an
+  actionable `WADLastError()` message instead of terminating the process.
+- `W_LumpLength` → existing `WADLumpSize()`.
+- `W_ReadLump` → `WADReadLump()`; the zone cache (`W_CacheLumpNum`) is not
+  ported in this milestone.
+
+Lookup semantics:
+
+- The query is normalized with ASCII `a`–`z` → `A`–`Z` only. Empty queries and
+  characters outside printable ASCII (32–126) are rejected with `-1` and an
+  error message; this is stricter than `strupr()` on arbitrary locale bytes.
+- Exactly eight bytes are compared. Shorter queries are NUL-padded; queries
+  longer than eight bytes use their first eight bytes, as `strncpy` does.
+- The directory is scanned from the last entry to the first, so the later
+  duplicate wins, including zero-length markers.
+- Stored name bytes are never modified. A malformed directory that stores a
+  lowercase name does not match an uppercased query, matching the raw-byte
+  comparison of the reference; the raw bytes remain available through
+  `WADLumpRawNameHex()`.
+- Lookup performs no I/O and does not read payload bytes.
+
+Payload-read semantics:
+
+- `WADReadLump(Index, Destination, Capacity)` uses a caller-owned buffer.
+  `Capacity` must be nonnegative and at least the lump size; only the lump size
+  is written. The function never allocates a substitute buffer.
+- Capacity is not used for allocation, so very large capacity values are
+  harmless. Bytes are copied verbatim, without string conversion or a
+  terminator.
+- Zero-length markers succeed without opening or seeking the file and accept a
+  null destination.
+- Every nonempty read reopens the WAD read-only by the saved path, checks that
+  `Lof()` still equals the size captured by `WADOpen()`, revalidates
+  `Int64(position) + Int64(size)` against the current length, verifies
+  `Loc()` after `FileSeek()`, reads in 16 MB chunks and verifies every
+  `ReadData()` count. The temporary handle is closed on every success and
+  failure path.
+- Validation failures are detected before the first payload byte is written.
+  A short read after transfer has begun may leave the destination partially
+  modified; this is documented and reported as an error.
+- A file replaced with different bytes of exactly the same size cannot be
+  detected by these checks.
+
+Safety hardening compared with the original:
+
+- Invalid indices, null destinations, negative capacity and undersized buffers
+  are controlled errors instead of calls that would abort the process.
+- A changed file length after parsing is rejected before any seek or read.
+- Payload reads are chunked, so the single `ReadData()` 2 GB limit is never
+  approached and no size is truncated silently.
+
+Verified behaviour:
+
+- `tests/unit/wad_lump_tests.pb` covers L01–L20 plus the lowercase-stored-name
+  compatibility case (X01) with synthetic fixtures and canary bytes.
+- The M1-01 suite remains unchanged and continues to pass.
 
 ## Compatibility conventions adopted so far
 

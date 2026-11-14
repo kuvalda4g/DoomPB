@@ -1,12 +1,13 @@
 <#
 .SYNOPSIS
-    Runs the DoomPB M0 verification suite on Windows.
+    Runs the DoomPB verification suite on Windows.
 
 .DESCRIPTION
     Performs a real PureBasic syntax check, a real build, the synthetic WAD
-    header/directory unit tests, and smoke tests against the produced
-    executable: --version, --help, no-argument startup and unknown-option
-    handling. No commercial game data and no display are needed.
+    header/directory and lump lookup/payload unit tests, and smoke tests against
+    the produced executable: --version, --help, no-argument startup,
+    unknown-option handling and --lump-info argument validation. No commercial
+    game data and no display are needed.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -28,6 +29,7 @@ $repoRoot    = Split-Path -Parent $scriptDir
 $buildScript = Join-Path $scriptDir 'build.ps1'
 $exePath     = Join-Path $repoRoot 'build\DoomPB.exe'
 $unitTestExe = Join-Path $repoRoot 'build\DoomPB-WadTests.exe'
+$lumpTestExe = Join-Path $repoRoot 'build\DoomPB-WadLumpTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -47,11 +49,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -96,10 +98,28 @@ if ($status -ne 0 -or -not (Test-Path -LiteralPath $unitTestExe -PathType Leaf))
 }
 
 Write-Host ''
+Write-Host '== WAD lump lookup/payload test build =='
+$status = Invoke-BuildStep -Check -LumpTest
+Test-Condition ($status -eq 0) "WAD lump test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -LumpTest
+Test-Condition ($status -eq 0) "WAD lump test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $lumpTestExe -PathType Leaf) "WAD lump test output exists: $lumpTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $lumpTestExe -PathType Leaf)) {
+    Write-Host "Aborting: WAD lump test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
 Write-Host '== WAD header/directory unit tests =='
 & $unitTestExe
 $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "synthetic WAD tests exit with 0 (got $status)"
+
+Write-Host ''
+Write-Host '== WAD lump lookup/payload unit tests =='
+& $lumpTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic WAD lump tests exit with 0 (got $status)"
 
 Write-Host ''
 Write-Host '== Smoke tests =='
@@ -124,6 +144,15 @@ Test-Condition ($result.Output -match 'unknown option') 'unknown option produces
 
 $result = Invoke-DoomPB -Arguments @('--version', 'extra')
 Test-Condition ($result.ExitCode -eq 2) "too many arguments exits with 2 (got $($result.ExitCode))"
+
+$result = Invoke-DoomPB -Arguments @('--lump-info')
+Test-Condition ($result.ExitCode -eq 2) "--lump-info without a name exits with 2 (got $($result.ExitCode))"
+
+$result = Invoke-DoomPB -Arguments @('--iwad', 'definitely-missing-doompb.wad', '--lump-info', 'PLAYPAL')
+Test-Condition ($result.ExitCode -eq 1) "--lump-info with a missing WAD exits with 1 (got $($result.ExitCode))"
+
+$result = Invoke-DoomPB -Arguments @('--dump-info', '--lump-info', 'PLAYPAL')
+Test-Condition ($result.ExitCode -eq 2) "--dump-info and --lump-info conflict exits with 2 (got $($result.ExitCode))"
 
 Write-Host ''
 if ($script:failures -ne 0) {

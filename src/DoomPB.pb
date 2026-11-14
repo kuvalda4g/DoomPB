@@ -3,8 +3,9 @@
 ; Copyright (C) 2026 DoomPB contributors
 ; SPDX-License-Identifier: GPL-2.0-only
 ;
-; Console entry point. M1-01 provides WAD header/directory metadata only;
-; lump lookup, payload loading, graphics and gameplay belong to later tasks.
+; Console entry point. M1-01 provides WAD header/directory metadata and M1-02
+; provides named lookup plus payload reads through the WAD API; graphics and
+; gameplay belong to later tasks.
 ; -----------------------------------------------------------------------------
 
 EnableExplicit
@@ -30,24 +31,29 @@ Procedure PrintHelp()
   PrintN("Usage:")
   PrintN("  " + #DoomPB_Name + " [option]")
   PrintN("  " + #DoomPB_Name + " --iwad <path> --dump-info")
+  PrintN("  " + #DoomPB_Name + " --iwad <path> --lump-info <name>")
   PrintN("")
   PrintN("Options:")
   PrintN("  -h, --help       Show this help and exit")
   PrintN("  -v, --version    Show version information and exit")
   PrintN("      --iwad <path>  WAD file to inspect")
   PrintN("      --dump-info    Print WAD header and directory metadata (requires --iwad)")
+  PrintN("      --lump-info <name>")
+  PrintN("                     Print one lump's index, offset and size (requires --iwad)")
   PrintN("")
   PrintN("Without options " + #DoomPB_Name + " prints its bootstrap status and exits.")
-  PrintN("Only WAD header/directory metadata is available so far (milestone M1-01).")
-  PrintN("Lump loading, graphics and gameplay are not implemented yet.")
+  PrintN("WAD metadata and named lookup are available so far (milestone M1-02).")
+  PrintN("Payload bytes are exposed only through the WAD API, not through this CLI.")
+  PrintN("Graphics and gameplay are not implemented yet.")
   PrintN("No game data is read unless --iwad is supplied.")
 EndProcedure
 
 Procedure PrintBootstrapStatus()
   PrintN(#DoomPB_Name + " " + #DoomPB_Version)
-  PrintN("Status: bootstrap build. WAD header/directory parsing is available;")
-  PrintN("lump loading, graphics and gameplay are not implemented yet.")
-  PrintN("Use '" + #DoomPB_Name + " --iwad <path> --dump-info' to inspect a WAD directory.")
+  PrintN("Status: bootstrap build. WAD header/directory parsing and named lump")
+  PrintN("lookup are available; payload reading exists in the WAD API only.")
+  PrintN("Graphics and gameplay are not implemented yet.")
+  PrintN("Use '" + #DoomPB_Name + " --iwad <path> --dump-info' or '--lump-info <name>' to inspect a WAD.")
   PrintN("A legally obtained DOOM.WAD is required for game data, never for this build itself.")
 EndProcedure
 
@@ -75,11 +81,40 @@ Procedure.i DumpWadInfo(Path.s)
   ProcedureReturn #DoomPB_ExitOk
 EndProcedure
 
+; Prints lookup metadata only: never lump bytes or copyrighted payload data.
+Procedure.i PrintLumpInfo(Path.s, Name.s)
+  Protected lumpIndex.i
+
+  If WADOpen(Path) = #False
+    PrintN(#DoomPB_Name + ": " + WADLastError())
+    ProcedureReturn #DoomPB_ExitFailure
+  EndIf
+
+  lumpIndex = WADFindLump(Name)
+  If lumpIndex < 0
+    PrintN(#DoomPB_Name + ": " + WADLastError())
+    WADClose()
+    ProcedureReturn #DoomPB_ExitFailure
+  EndIf
+
+  PrintN(#DoomPB_Name + " " + #DoomPB_Version)
+  PrintN("WAD file: " + WADGetPath())
+  PrintN("Lump: " + WADLumpDisplayName(lumpIndex))
+  PrintN("Index: " + Str(lumpIndex))
+  PrintN("Offset: " + Str(WADLumpPosition(lumpIndex)))
+  PrintN("Size: " + Str(WADLumpSize(lumpIndex)))
+
+  WADClose()
+  ProcedureReturn #DoomPB_ExitOk
+EndProcedure
+
 Define argumentCount.i
 Define argument.s
 Define exitCode.i = #DoomPB_ExitOk
 Define wadPath.s = ""
 Define dumpInfo.i = #False
+Define lumpInfo.i = #False
+Define lumpName.s = ""
 Define sawIwad.i = #False
 Define index.i
 Define parseError.s = ""
@@ -103,6 +138,9 @@ ElseIf argumentCount = 1
       exitCode = #DoomPB_ExitUsage
     Case "--dump-info"
       PrintUsageError("'--dump-info' requires '--iwad <path>'.")
+      exitCode = #DoomPB_ExitUsage
+    Case "--lump-info"
+      PrintUsageError("'--lump-info' requires '--iwad <path> <name>'.")
       exitCode = #DoomPB_ExitUsage
     Default
       PrintUsageError("unknown option '" + argument + "'.")
@@ -133,6 +171,20 @@ Else
         Else
           dumpInfo = #True
         EndIf
+      Case "--lump-info"
+        If lumpInfo
+          parseError = "duplicate '--lump-info' option."
+        ElseIf index + 1 >= argumentCount
+          parseError = "'--lump-info' requires a lump name."
+        Else
+          index + 1
+          lumpName = ProgramParameter(index)
+          If lumpName = ""
+            parseError = "'--lump-info' requires a non-empty lump name."
+          Else
+            lumpInfo = #True
+          EndIf
+        EndIf
       Default
         parseError = "unknown option '" + argument + "'."
     EndSelect
@@ -142,13 +194,21 @@ Else
   If parseError <> ""
     PrintUsageError(parseError)
     exitCode = #DoomPB_ExitUsage
+  ElseIf dumpInfo And lumpInfo
+    PrintUsageError("'--dump-info' and '--lump-info' cannot be combined.")
+    exitCode = #DoomPB_ExitUsage
   ElseIf dumpInfo And sawIwad
     exitCode = DumpWadInfo(wadPath)
+  ElseIf lumpInfo And sawIwad
+    exitCode = PrintLumpInfo(wadPath, lumpName)
   ElseIf dumpInfo
     PrintUsageError("'--dump-info' requires '--iwad <path>'.")
     exitCode = #DoomPB_ExitUsage
+  ElseIf lumpInfo
+    PrintUsageError("'--lump-info' requires '--iwad <path> <name>'.")
+    exitCode = #DoomPB_ExitUsage
   ElseIf sawIwad
-    PrintUsageError("'--iwad' requires '--dump-info'; payload commands arrive in a later milestone.")
+    PrintUsageError("'--iwad' requires '--dump-info' or '--lump-info <name>'.")
     exitCode = #DoomPB_ExitUsage
   Else
     PrintUsageError("no action specified.")

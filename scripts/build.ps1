@@ -15,8 +15,12 @@
     Run only the PureBasic syntax check; no executable is produced.
 
 .PARAMETER Test
-    Build the synthetic WAD unit-test program (tests/unit/wad_header_tests.pb)
-    instead of the main executable.
+    Build the synthetic WAD header/directory unit-test program
+    (tests/unit/wad_header_tests.pb) instead of the main executable.
+
+.PARAMETER LumpTest
+    Build the synthetic WAD lookup/payload unit-test program
+    (tests/unit/wad_lump_tests.pb) instead of the main executable.
 
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
@@ -27,11 +31,15 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -Test
+
+.EXAMPLE
+    ./scripts/build.ps1 -LumpTest
 #>
 [CmdletBinding()]
 param(
     [switch]$Check,
     [switch]$Test,
+    [switch]$LumpTest,
     [string]$CompilerPath = ''
 )
 
@@ -41,7 +49,15 @@ $scriptDir = $PSScriptRoot
 $repoRoot  = Split-Path -Parent $scriptDir
 $buildDir  = Join-Path $repoRoot 'build'
 
-if ($Test) {
+if ($Test -and $LumpTest) {
+    Write-Host 'error: -Test and -LumpTest select different programs; choose one.' -ForegroundColor Red
+    exit 1
+}
+
+if ($LumpTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\wad_lump_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-WadLumpTests.exe'
+} elseif ($Test) {
     $sourceFile = Join-Path $repoRoot 'tests\unit\wad_header_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-WadTests.exe'
 } else {

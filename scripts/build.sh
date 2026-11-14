@@ -19,15 +19,18 @@ BUILD_DIR="${REPO_ROOT}/build"
 OUTPUT_FILE="${BUILD_DIR}/DoomPB"
 CHECK_ONLY=0
 TEST_BUILD=0
+LUMP_TEST_BUILD=0
 
 usage() {
     cat <<'EOF'
-Usage: build.sh [--check | --test] [--help]
+Usage: build.sh [--check | --test | --lump-test] [--help]
 
-  (no option)  Syntax-check and build build/DoomPB.
-  -k, --check  Run the PureBasic syntax check only.
-  -t, --test   Build the synthetic WAD unit-test program instead.
-  -h, --help   Show this help and exit.
+  (no option)   Syntax-check and build build/DoomPB.
+  -k, --check   Run the PureBasic syntax check only.
+  -t, --test    Build the WAD header/directory test program instead.
+  -l, --lump-test
+                Build the WAD lump lookup/payload test program instead.
+  -h, --help    Show this help and exit.
 
 Compiler discovery: PB_COMPILER, then pbcompiler on PATH, then common
 installation directories. Set PB_COMPILER to select a specific compiler.
@@ -79,6 +82,9 @@ while [ $# -gt 0 ]; do
         -t|--test)
             TEST_BUILD=1
             ;;
+        -l|--lump-test)
+            LUMP_TEST_BUILD=1
+            ;;
         -h|--help)
             usage
             exit 0
@@ -94,9 +100,19 @@ done
 
 [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 
+if [ "${TEST_BUILD}" -eq 1 ] && [ "${LUMP_TEST_BUILD}" -eq 1 ]; then
+    fail '--test and --lump-test select different programs; choose one.'
+fi
+
 if [ "${TEST_BUILD}" -eq 1 ]; then
     SOURCE_FILE="${REPO_ROOT}/tests/unit/wad_header_tests.pb"
     OUTPUT_FILE="${BUILD_DIR}/DoomPB-WadTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
+
+if [ "${LUMP_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/unit/wad_lump_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-WadLumpTests"
     [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 fi
 
