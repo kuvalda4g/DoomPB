@@ -14,6 +14,10 @@
 .PARAMETER Check
     Run only the PureBasic syntax check; no executable is produced.
 
+.PARAMETER Test
+    Build the synthetic WAD unit-test program (tests/unit/wad_header_tests.pb)
+    instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -22,21 +26,28 @@
     ./scripts/build.ps1 -Check
 
 .EXAMPLE
-    ./scripts/build.ps1
+    ./scripts/build.ps1 -Test
 #>
 [CmdletBinding()]
 param(
     [switch]$Check,
+    [switch]$Test,
     [string]$CompilerPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 
-$scriptDir  = $PSScriptRoot
-$repoRoot   = Split-Path -Parent $scriptDir
-$sourceFile = Join-Path $repoRoot 'src\DoomPB.pb'
-$buildDir   = Join-Path $repoRoot 'build'
-$outputFile = Join-Path $buildDir 'DoomPB.exe'
+$scriptDir = $PSScriptRoot
+$repoRoot  = Split-Path -Parent $scriptDir
+$buildDir  = Join-Path $repoRoot 'build'
+
+if ($Test) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\wad_header_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-WadTests.exe'
+} else {
+    $sourceFile = Join-Path $repoRoot 'src\DoomPB.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB.exe'
+}
 
 function Fail {
     param([string]$Message)

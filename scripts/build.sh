@@ -18,13 +18,15 @@ SOURCE_FILE="${REPO_ROOT}/src/DoomPB.pb"
 BUILD_DIR="${REPO_ROOT}/build"
 OUTPUT_FILE="${BUILD_DIR}/DoomPB"
 CHECK_ONLY=0
+TEST_BUILD=0
 
 usage() {
     cat <<'EOF'
-Usage: build.sh [--check] [--help]
+Usage: build.sh [--check | --test] [--help]
 
   (no option)  Syntax-check and build build/DoomPB.
   -k, --check  Run the PureBasic syntax check only.
+  -t, --test   Build the synthetic WAD unit-test program instead.
   -h, --help   Show this help and exit.
 
 Compiler discovery: PB_COMPILER, then pbcompiler on PATH, then common
@@ -74,6 +76,9 @@ while [ $# -gt 0 ]; do
         -k|--check)
             CHECK_ONLY=1
             ;;
+        -t|--test)
+            TEST_BUILD=1
+            ;;
         -h|--help)
             usage
             exit 0
@@ -88,6 +93,12 @@ while [ $# -gt 0 ]; do
 done
 
 [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+
+if [ "${TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/unit/wad_header_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-WadTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
 
 COMPILER="$(find_compiler)" || exit 1
 printf 'Compiler: %s\n' "${COMPILER}"

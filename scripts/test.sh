@@ -2,9 +2,10 @@
 #
 # Runs the DoomPB M0 verification suite on Linux/Unix.
 #
-# Performs a real PureBasic syntax check, a real build, and smoke tests against
-# the produced executable: --version, --help, no-argument startup and
-# unknown-option handling. No commercial game data and no display are needed.
+# Performs a real PureBasic syntax check, a real build, the synthetic WAD
+# header/directory unit tests, and smoke tests against the produced executable:
+# --version, --help, no-argument startup and unknown-option handling. No
+# commercial game data and no display are needed.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -15,6 +16,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." >/dev/null 2>&1 && pwd)"
 BUILD_SCRIPT="${SCRIPT_DIR}/build.sh"
 BIN="${REPO_ROOT}/build/DoomPB"
+UNIT_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -86,6 +88,50 @@ else
     FAILURES=$((FAILURES + 1))
     printf 'Aborting: build output missing.\n' >&2
     exit 1
+fi
+
+printf '\n== WAD unit test build ==\n'
+run_build --check --test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD test syntax check exits with 0\n'
+else
+    printf 'FAIL: WAD test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD test build exits with 0\n'
+else
+    printf 'FAIL: WAD test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${UNIT_TEST_BIN}" ]; then
+    printf 'PASS: WAD test output exists: %s\n' "${UNIT_TEST_BIN}"
+else
+    printf 'FAIL: WAD test output missing: %s\n' "${UNIT_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== WAD header/directory unit tests ==\n'
+"${UNIT_TEST_BIN}"
+unit_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${unit_status}" -eq 0 ]; then
+    printf 'PASS: synthetic WAD tests exit with 0\n'
+else
+    printf 'FAIL: synthetic WAD tests exit with %s\n' "${unit_status}" >&2
+    FAILURES=$((FAILURES + 1))
 fi
 
 printf '\n== Smoke tests ==\n'

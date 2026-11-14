@@ -3,9 +3,10 @@
     Runs the DoomPB M0 verification suite on Windows.
 
 .DESCRIPTION
-    Performs a real PureBasic syntax check, a real build, and smoke tests
-    against the produced executable: --version, --help, no-argument startup and
-    unknown-option handling. No commercial game data and no display are needed.
+    Performs a real PureBasic syntax check, a real build, the synthetic WAD
+    header/directory unit tests, and smoke tests against the produced
+    executable: --version, --help, no-argument startup and unknown-option
+    handling. No commercial game data and no display are needed.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -26,6 +27,7 @@ $scriptDir   = $PSScriptRoot
 $repoRoot    = Split-Path -Parent $scriptDir
 $buildScript = Join-Path $scriptDir 'build.ps1'
 $exePath     = Join-Path $repoRoot 'build\DoomPB.exe'
+$unitTestExe = Join-Path $repoRoot 'build\DoomPB-WadTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -45,11 +47,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check)
+    param([switch]$Check, [switch]$Test)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check
+        & $buildScript -Check:$Check -Test:$Test
     } else {
-        & $buildScript -Check:$Check -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -80,6 +82,24 @@ if ($status -ne 0 -or -not (Test-Path -LiteralPath $exePath -PathType Leaf)) {
     Write-Host "Aborting: build failed." -ForegroundColor Red
     exit 1
 }
+
+Write-Host ''
+Write-Host '== WAD unit test build =='
+$status = Invoke-BuildStep -Check -Test
+Test-Condition ($status -eq 0) "WAD test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -Test
+Test-Condition ($status -eq 0) "WAD test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $unitTestExe -PathType Leaf) "WAD test output exists: $unitTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $unitTestExe -PathType Leaf)) {
+    Write-Host "Aborting: WAD test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== WAD header/directory unit tests =='
+& $unitTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic WAD tests exit with 0 (got $status)"
 
 Write-Host ''
 Write-Host '== Smoke tests =='
