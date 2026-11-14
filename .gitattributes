@@ -1,0 +1,18 @@
+# Normalize text files on commit; keep binary data untouched.
+* text=auto
+
+*.pb     text
+*.pbi    text
+*.md     text
+*.ps1    text eol=crlf
+*.sh     text eol=lf
+
+# Game data and compiled artifacts must never be line-ending converted.
+*.wad    -text
+*.WAD    -text
+*.iwad   -text
+*.IWAD   -text
+*.exe    binary
+*.dll    binary
+*.so     binary
+*.pbp    binary

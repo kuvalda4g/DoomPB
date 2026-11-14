@@ -1,0 +1,31 @@
+# Commercial and user-provided game data
+*.wad
+*.WAD
+*.iwad
+*.IWAD
+*.pk3
+local-data/
+data/
+
+# Binary outputs, caches and logs
+build/
+dist/
+*.exe
+*.dll
+*.so
+*.log
+*.tmp
+*.bak
+*.pbf
+purebasic.asm
+purebasic.c
+
+# Personal IDE/OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local environment / secrets
+.env
+*.env
