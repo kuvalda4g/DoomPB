@@ -5,11 +5,11 @@ in **PureBasic**. The goal is to reproduce the behaviour of id Software's
 **Linux Doom 1.10** — software renderer, fixed-point arithmetic, 35 Hz game
 ticks and WAD compatibility — rather than to reimagine it.
 
-> **Status: `0.0.1` — M0 and M1-01 complete, M1-02 in progress.**
-> The executable can validate a WAD header, read its lump directory, look up
-> lumps by name and read raw lump payloads through the WAD API (metadata only
-> from the CLI). `PLAYPAL`/`TITLEPIC` decoding, the renderer and gameplay are
-> not implemented yet.
+> **Status: `0.0.1` — M0, M1-01 and M1-02 complete; M1-03 in progress.**
+> The executable can validate a WAD, look up lumps, read raw payloads, decode
+> `PLAYPAL` palettes and decode Doom picture/patch lumps into indexed pixels
+> plus a transparency mask. Presenting `TITLEPIC` in a window (M1-04), the
+> renderer and gameplay are not implemented yet.
 
 ## Legal notice
 
@@ -50,6 +50,9 @@ repository.
 # Build the lookup/payload tests -> build/DoomPB-WadLumpTests.exe
 ./scripts/build.ps1 -LumpTest
 
+# Build the palette/patch decoder tests -> build/DoomPB-WadGraphicsTests.exe
+./scripts/build.ps1 -GraphicsTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -69,15 +72,19 @@ repository.
 # Build the lookup/payload tests -> build/DoomPB-WadLumpTests
 ./scripts/build.sh --lump-test
 
+# Build the palette/patch decoder tests -> build/DoomPB-WadGraphicsTests
+./scripts/build.sh --graphics-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, both synthetic WAD test
-suites (header/directory and lump lookup/payload), and smoke tests against the
-produced executable. They need no game data and no graphical display.
+The test scripts run a real syntax check, a real build, all three synthetic WAD
+test suites (header/directory, lump lookup/payload and PLAYPAL/patch decoding),
+and smoke tests against the produced executable. They need no game data and no
+graphical display.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -132,8 +139,41 @@ WADReadLump(Index, Destination, Cap)  -> #True / #False
   revalidates 64-bit bounds and closes the handle on every path. A short read
   may leave the destination partially modified and is reported as an error.
 
-`PLAYPAL`, patch decoding and `TITLEPIC` belong to later M1 tasks and are
-**not implemented yet**.
+`PLAYPAL` and patch decoding are implemented in `src/Graphics/`; presenting
+`TITLEPIC` in a window belongs to M1-04 and is **not implemented yet**.
+
+## Graphics API
+
+The decoders operate on caller-loaded byte buffers and do not depend on WAD
+globals, so they can be reused by a future lump cache.
+
+```text
+PaletteDecode(Bytes, Length, *PaletteSet)  -> #True / #False
+PaletteReset(*PaletteSet)
+PaletteCount(*PaletteSet)                  -> palette count
+PaletteGetRGB(*PaletteSet, Palette, Color, *R, *G, *B)
+
+PatchDecode(Bytes, Length, *PatchImage)    -> #True / #False
+PatchReset(*PatchImage)
+PatchPixelAt(*PatchImage, X, Y)            -> index, or -1
+PatchOpaqueAt(*PatchImage, X, Y)           -> 0/1, or -1
+```
+
+- `PaletteSet` and `PatchImage` are caller-owned structures; zero-initialize
+  them once (`ClearStructure`). `PaletteDecode`/`PatchDecode` own their internal
+  buffers and replace previous data. `Reset` frees the buffers and leaves the
+  structure reusable. A failed decode leaves the result empty.
+- `PLAYPAL` is a sequence of 768-byte palettes (256 RGB triples). Channels are
+  returned as stored, without VGA scaling or gamma. The decoder accepts up to
+  256 palettes and rejects zero, negative or non-multiple-of-768 lengths.
+- A patch becomes a row-major 8-bit palette-index plane plus a separate opaque
+  mask (`0` transparent, `1` opaque). Pixel value 255 is an ordinary index.
+  Signed `leftoffset`/`topoffset` are preserved but not applied during decoding.
+  Vanilla absolute `topdelta` semantics are used; tall-patch relative offsets
+  are out of scope. Dimensions are limited to 4096 and 16,777,216 pixels.
+- Malformed offsets, posts, dimensions and truncations are rejected with an
+  actionable error; partial output is released. `PatchLastError()` and
+  `PaletteLastError()` report the last failure.
 
 ## Repository layout
 
@@ -141,6 +181,7 @@ WADReadLump(Index, Destination, Cap)  -> #True / #False
 src/        PureBasic sources (DoomPB.pb is the entry point)
 src/Core/   shared primitives (little-endian decoding, later fixed-point math)
 src/WAD/    WAD container reader, name lookup and payload reads
+src/Graphics/ PLAYPAL palette decoding and Doom patch decoding
 tests/unit/ self-contained tests with synthetic, generated fixtures
 scripts/    build/test scripts for Windows (PowerShell) and Linux (Bash)
 docs/       development plan, porting notes and task descriptions

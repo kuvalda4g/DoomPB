@@ -8,7 +8,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 | Milestone | State | Notes |
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
-| M1 — WAD loader and `TITLEPIC` | in progress | M1-01 committed as `1e5f7d5`; M1-02 (lookup/payload reads) implemented locally and not yet committed; `PLAYPAL`, patch decoding and `TITLEPIC` pending |
+| M1 — WAD loader and `TITLEPIC` | in progress | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`; M1-03 (`PLAYPAL` and patch decoders) implemented locally and not yet committed; presenting `TITLEPIC` belongs to M1-04 |
 
 `src/DoomPB.pb`, `src/Core/Endian.pbi` and `src/WAD/WAD.pbi` are original
 PureBasic code written for DoomPB. The WAD container parsing reproduces the
@@ -191,6 +191,83 @@ Verified behaviour:
 - `tests/unit/wad_lump_tests.pb` covers L01–L20 plus the lowercase-stored-name
   compatibility case (X01) with synthetic fixtures and canary bytes.
 - The M1-01 suite remains unchanged and continues to pass.
+
+## M1-03 — PLAYPAL and Doom patch decoding
+
+Original C symbols consulted (same pinned revision):
+
+- `patch_t` (`r_defs.h`): signed 16-bit width, height, leftoffset, topoffset and
+  a 32-bit `columnofs[width]` table relative to the patch start.
+- `post_t` / `column_t` (`r_defs.h`): `topdelta`, `length`, optional pad bytes and
+  a `0xFF` topdelta terminator.
+- `V_DrawPatch` (`v_video.c`): applies `leftoffset`/`topoffset` at draw time,
+  walks each column, copies `length` pixels from `column + 3`, and advances by
+  `length + 4`; a `0xFF` topdelta ends the column.
+- `D_PageDrawer` (`d_main.c`): draws a full page with `V_DrawPatch(0, 0, ...)`.
+- `PLAYPAL` use (`d_main.c` / `I_SetPalette`): raw 768-byte RGB palettes. No
+  palette conversion is performed by DoomPB at decode time.
+
+Port mapping:
+
+- `src/Graphics/Palette.pbi` decodes in-memory `PLAYPAL` bytes into a
+  caller-owned `PaletteSet` (count plus owned RGB block).
+- `src/Graphics/Patch.pbi` decodes in-memory Doom pictures into a caller-owned
+  `PatchImage` with separate row-major pixel-index and opacity planes.
+
+Palette semantics and ownership:
+
+- `PLAYPAL` must be a nonzero multiple of 768 bytes; up to 256 palettes are
+  accepted (the cap is 196,608 bytes) and the known IWAD contains 14.
+- Channels are copied exactly: no VGA 0–63 scaling, gamma, clipping, BGR swap
+  or palette blending.
+- `PaletteDecode` resets the result first, owns the RGB allocation and leaves
+  the structure empty on failure. `PaletteReset` frees the allocation and keeps
+  the structure reusable.
+- Palette and color indices are validated; rejected access does not write to
+  the caller's channel destinations.
+
+Patch semantics:
+
+- Input is never overlaid with a native structure; header fields are decoded
+  explicitly as little-endian 16/32-bit values.
+- Decoded pixels are row-major; transparency is stored only in the separate
+  mask plane (0 transparent, 1 opaque). Transparent pixel bytes are zero. Pixel
+  value 255 is an ordinary opaque palette index.
+- `leftoffset`/`topoffset` are decoded as signed 16-bit values and preserved;
+  they are not applied during decoding. Only vanilla absolute `topdelta`
+  semantics are implemented; tall-patch relative offsets are out of scope.
+- Posts are applied in source order, so later overlapping posts overwrite
+  earlier values. Zero-length posts are accepted when the cursor advances.
+- Validation limits: dimensions 1–4096, decoded pixels at most 16,777,216,
+  non-null input, 64-bit offset/size arithmetic, column offsets outside the
+  header table and inside the input, complete post headers and bodies,
+  terminator presence, and `topdelta + length <= height` before any write.
+- Allocation failure and any malformed input release both partial planes and
+  clear the decoded metadata. `PatchReset` releases both planes; the decoded
+  image never borrows the source buffer, so the input may be freed immediately.
+
+Intentional differences from the original renderer:
+
+- The original trusts WAD data and performs unchecked reads/seeks. DoomPB
+  validates every offset, post and destination write and reports errors.
+- Column offsets pointing inside the patch header/table are rejected. Known
+  vanilla pictures point after the table; this is stricter than the original.
+- Zero-initializing transparent pixel bytes is a decoder choice; the mask is
+  authoritative for transparency.
+
+Verified behaviour:
+
+- `tests/unit/wad_graphics_tests.pb` covers P01–P10 and G01–G24: 34 cases,
+  197 assertions, real compiled executable.
+- Local Ultimate Doom 1.9ud (`data/DOOM.WAD`, MD5
+  `c4fe9fd920207691a9f493668e0a2083`): `PLAYPAL` raw FNV-1a64
+  `0872FFC746616E5A`, decoded count 14; `TITLEPIC` raw FNV-1a64
+  `5F1254C1156A681E`, decoded 320×200 with offsets 0/0, 64,000 opaque pixels,
+  pixel FNV-1a64 `19C7668B2DF19A1A` and mask FNV-1a64 `C68BF664EFA3E525`.
+- A separate PowerShell decoder (different implementation) produced the same
+  dimensions, opaque count, corner pixels and pixel checksum; its mask value is
+  identical modulo a leading-zero formatting artefact. This is a structural and
+  checksum cross-check, not proof of pixel-perfect equivalence with a renderer.
 
 ## Compatibility conventions adopted so far
 

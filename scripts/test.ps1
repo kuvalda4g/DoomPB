@@ -4,10 +4,10 @@
 
 .DESCRIPTION
     Performs a real PureBasic syntax check, a real build, the synthetic WAD
-    header/directory and lump lookup/payload unit tests, and smoke tests against
-    the produced executable: --version, --help, no-argument startup,
-    unknown-option handling and --lump-info argument validation. No commercial
-    game data and no display are needed.
+    header/directory, lump lookup/payload and PLAYPAL/patch decoder unit tests,
+    and smoke tests against the produced executable: --version, --help,
+    no-argument startup, unknown-option handling and --lump-info argument
+    validation. No commercial game data and no display are needed.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -30,6 +30,7 @@ $buildScript = Join-Path $scriptDir 'build.ps1'
 $exePath     = Join-Path $repoRoot 'build\DoomPB.exe'
 $unitTestExe = Join-Path $repoRoot 'build\DoomPB-WadTests.exe'
 $lumpTestExe = Join-Path $repoRoot 'build\DoomPB-WadLumpTests.exe'
+$graphicsTestExe = Join-Path $repoRoot 'build\DoomPB-WadGraphicsTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -49,11 +50,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -116,10 +117,28 @@ $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "synthetic WAD tests exit with 0 (got $status)"
 
 Write-Host ''
+Write-Host '== WAD graphics decoder test build =='
+$status = Invoke-BuildStep -Check -GraphicsTest
+Test-Condition ($status -eq 0) "WAD graphics test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -GraphicsTest
+Test-Condition ($status -eq 0) "WAD graphics test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $graphicsTestExe -PathType Leaf) "WAD graphics test output exists: $graphicsTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $graphicsTestExe -PathType Leaf)) {
+    Write-Host "Aborting: WAD graphics test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
 Write-Host '== WAD lump lookup/payload unit tests =='
 & $lumpTestExe
 $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "synthetic WAD lump tests exit with 0 (got $status)"
+
+Write-Host ''
+Write-Host '== WAD PLAYPAL/patch decoder unit tests =='
+& $graphicsTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic WAD graphics tests exit with 0 (got $status)"
 
 Write-Host ''
 Write-Host '== Smoke tests =='

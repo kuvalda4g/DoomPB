@@ -3,10 +3,10 @@
 # Runs the DoomPB verification suite on Linux/Unix.
 #
 # Performs a real PureBasic syntax check, a real build, the synthetic WAD
-# header/directory and lump lookup/payload unit tests, and smoke tests against
-# the produced executable: --version, --help, no-argument startup,
-# unknown-option handling and --lump-info argument validation. No commercial
-# game data and no display are needed.
+# header/directory, lump lookup/payload and PLAYPAL/patch decoder unit tests,
+# and smoke tests against the produced executable: --version, --help,
+# no-argument startup, unknown-option handling and --lump-info argument
+# validation. No commercial game data and no display are needed.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -19,6 +19,7 @@ BUILD_SCRIPT="${SCRIPT_DIR}/build.sh"
 BIN="${REPO_ROOT}/build/DoomPB"
 UNIT_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadTests"
 LUMP_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadLumpTests"
+GRAPHICS_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadGraphicsTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -177,6 +178,50 @@ if [ "${lump_status}" -eq 0 ]; then
     printf 'PASS: synthetic WAD lump tests exit with 0\n'
 else
     printf 'FAIL: synthetic WAD lump tests exit with %s\n' "${lump_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== WAD graphics decoder test build ==\n'
+run_build --check --graphics-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD graphics test syntax check exits with 0\n'
+else
+    printf 'FAIL: WAD graphics test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD graphics test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --graphics-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD graphics test build exits with 0\n'
+else
+    printf 'FAIL: WAD graphics test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD graphics test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${GRAPHICS_TEST_BIN}" ]; then
+    printf 'PASS: WAD graphics test output exists: %s\n' "${GRAPHICS_TEST_BIN}"
+else
+    printf 'FAIL: WAD graphics test output missing: %s\n' "${GRAPHICS_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD graphics test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== WAD PLAYPAL/patch decoder unit tests ==\n'
+"${GRAPHICS_TEST_BIN}"
+graphics_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${graphics_status}" -eq 0 ]; then
+    printf 'PASS: synthetic WAD graphics tests exit with 0\n'
+else
+    printf 'FAIL: synthetic WAD graphics tests exit with %s\n' "${graphics_status}" >&2
     FAILURES=$((FAILURES + 1))
 fi
 

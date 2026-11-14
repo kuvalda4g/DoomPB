@@ -22,6 +22,10 @@
     Build the synthetic WAD lookup/payload unit-test program
     (tests/unit/wad_lump_tests.pb) instead of the main executable.
 
+.PARAMETER GraphicsTest
+    Build the synthetic PLAYPAL/patch decoder unit-test program
+    (tests/unit/wad_graphics_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -34,12 +38,16 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -LumpTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -GraphicsTest
 #>
 [CmdletBinding()]
 param(
     [switch]$Check,
     [switch]$Test,
     [switch]$LumpTest,
+    [switch]$GraphicsTest,
     [string]$CompilerPath = ''
 )
 
@@ -49,12 +57,19 @@ $scriptDir = $PSScriptRoot
 $repoRoot  = Split-Path -Parent $scriptDir
 $buildDir  = Join-Path $repoRoot 'build'
 
-if ($Test -and $LumpTest) {
-    Write-Host 'error: -Test and -LumpTest select different programs; choose one.' -ForegroundColor Red
+$selectedTargets = 0
+if ($Test) { $selectedTargets++ }
+if ($LumpTest) { $selectedTargets++ }
+if ($GraphicsTest) { $selectedTargets++ }
+if ($selectedTargets -gt 1) {
+    Write-Host 'error: -Test, -LumpTest and -GraphicsTest select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($LumpTest) {
+if ($GraphicsTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\wad_graphics_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-WadGraphicsTests.exe'
+} elseif ($LumpTest) {
     $sourceFile = Join-Path $repoRoot 'tests\unit\wad_lump_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-WadLumpTests.exe'
 } elseif ($Test) {
