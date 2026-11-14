@@ -3,10 +3,11 @@
 # Runs the DoomPB verification suite on Linux/Unix.
 #
 # Performs a real PureBasic syntax check, a real build, the synthetic WAD
-# header/directory, lump lookup/payload and PLAYPAL/patch decoder unit tests,
-# and smoke tests against the produced executable: --version, --help,
-# no-argument startup, unknown-option handling and --lump-info argument
-# validation. No commercial game data and no display are needed.
+# header/directory, lump lookup/payload, PLAYPAL/patch decoder and
+# framebuffer/presentation unit tests, and smoke tests against the produced
+# executable: --version, --help, no-argument startup, unknown-option handling,
+# --lump-info argument validation and nonblocking --show-title failures. No
+# commercial game data and no display are needed.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -20,6 +21,7 @@ BIN="${REPO_ROOT}/build/DoomPB"
 UNIT_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadTests"
 LUMP_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadLumpTests"
 GRAPHICS_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadGraphicsTests"
+DISPLAY_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadDisplayTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -225,9 +227,53 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+printf '\n== WAD framebuffer/presentation test build ==\n'
+run_build --check --display-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD display test syntax check exits with 0\n'
+else
+    printf 'FAIL: WAD display test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD display test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --display-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD display test build exits with 0\n'
+else
+    printf 'FAIL: WAD display test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD display test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${DISPLAY_TEST_BIN}" ]; then
+    printf 'PASS: WAD display test output exists: %s\n' "${DISPLAY_TEST_BIN}"
+else
+    printf 'FAIL: WAD display test output missing: %s\n' "${DISPLAY_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD display test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== WAD framebuffer/presentation unit tests ==\n'
+"${DISPLAY_TEST_BIN}"
+display_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${display_status}" -eq 0 ]; then
+    printf 'PASS: synthetic WAD display tests exit with 0\n'
+else
+    printf 'FAIL: synthetic WAD display tests exit with %s\n' "${display_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
 printf '\n== Smoke tests ==\n'
 
-check_case '--version exits with 0 and prints DoomPB 0.0.1' 0 '^DoomPB 0\.0\.1$' --version
+check_case '--version exits with 0 and prints DoomPB 0.1.0' 0 '^DoomPB 0\.1\.0$' --version
 check_case '--help exits with 0 and prints usage' 0 '^Usage:' --help
 
 # --help also has to mention both options; check that separately to keep the
@@ -248,6 +294,9 @@ check_case 'too many arguments exits with 2' 2 '' --version extra
 check_case '--lump-info without a name exits with 2' 2 '' --lump-info
 check_case 'missing WAD for --lump-info exits with 1' 1 '' --iwad definitely-missing-doompb.wad --lump-info PLAYPAL
 check_case '--dump-info with --lump-info exits with 2' 2 '' --dump-info --lump-info PLAYPAL
+check_case '--show-title without --iwad exits with 2' 2 '' --show-title
+check_case 'missing WAD for --show-title exits with 1' 1 '' --iwad definitely-missing-doompb.wad --show-title
+check_case '--dump-info with --show-title exits with 2' 2 '' --dump-info --show-title
 
 printf '\n'
 if [ "${FAILURES}" -ne 0 ]; then

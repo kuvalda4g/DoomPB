@@ -3,18 +3,22 @@
 ; Copyright (C) 2026 DoomPB contributors
 ; SPDX-License-Identifier: GPL-2.0-only
 ;
-; Console entry point. M1-01 provides WAD header/directory metadata and M1-02
-; provides named lookup plus payload reads through the WAD API; graphics and
-; gameplay belong to later tasks.
+; Console entry point. M1-01/M1-02 provide WAD access, M1-03 provides PLAYPAL
+; and patch decoders, and M1-04 adds an indexed framebuffer plus a windowed
+; TITLEPIC presentation mode. Gameplay remains out of scope.
 ; -----------------------------------------------------------------------------
 
 EnableExplicit
 
 XIncludeFile "Core/Endian.pbi"
 XIncludeFile "WAD/WAD.pbi"
+XIncludeFile "Graphics/Palette.pbi"
+XIncludeFile "Graphics/Patch.pbi"
+XIncludeFile "Graphics/FrameBuffer.pbi"
+XIncludeFile "Graphics/Video.pbi"
 
 #DoomPB_Name    = "DoomPB"
-#DoomPB_Version = "0.0.1"
+#DoomPB_Version = "0.1.0"
 
 ; Exit-code convention shared with scripts/test.ps1 and scripts/test.sh.
 #DoomPB_ExitOk      = 0
@@ -32,6 +36,7 @@ Procedure PrintHelp()
   PrintN("  " + #DoomPB_Name + " [option]")
   PrintN("  " + #DoomPB_Name + " --iwad <path> --dump-info")
   PrintN("  " + #DoomPB_Name + " --iwad <path> --lump-info <name>")
+  PrintN("  " + #DoomPB_Name + " --iwad <path> --show-title")
   PrintN("")
   PrintN("Options:")
   PrintN("  -h, --help       Show this help and exit")
@@ -40,20 +45,22 @@ Procedure PrintHelp()
   PrintN("      --dump-info    Print WAD header and directory metadata (requires --iwad)")
   PrintN("      --lump-info <name>")
   PrintN("                     Print one lump's index, offset and size (requires --iwad)")
+  PrintN("      --show-title   Open a window with TITLEPIC at 3x nearest-neighbour")
+  PrintN("                     (requires --iwad; close the window to exit)")
   PrintN("")
   PrintN("Without options " + #DoomPB_Name + " prints its bootstrap status and exits.")
-  PrintN("WAD metadata and named lookup are available so far (milestone M1-02).")
+  PrintN("WAD metadata, named lookup and TITLEPIC presentation are available (M1-04).")
   PrintN("Payload bytes are exposed only through the WAD API, not through this CLI.")
-  PrintN("Graphics and gameplay are not implemented yet.")
+  PrintN("Gameplay is not implemented yet.")
   PrintN("No game data is read unless --iwad is supplied.")
 EndProcedure
 
 Procedure PrintBootstrapStatus()
   PrintN(#DoomPB_Name + " " + #DoomPB_Version)
-  PrintN("Status: bootstrap build. WAD header/directory parsing and named lump")
-  PrintN("lookup are available; payload reading exists in the WAD API only.")
-  PrintN("Graphics and gameplay are not implemented yet.")
-  PrintN("Use '" + #DoomPB_Name + " --iwad <path> --dump-info' or '--lump-info <name>' to inspect a WAD.")
+  PrintN("Status: bootstrap build. WAD parsing, lump lookup, PLAYPAL/patch")
+  PrintN("decoding and a windowed TITLEPIC mode are available.")
+  PrintN("Gameplay is not implemented yet.")
+  PrintN("Use '--iwad <path> --dump-info', '--lump-info <name>' or '--show-title'.")
   PrintN("A legally obtained DOOM.WAD is required for game data, never for this build itself.")
 EndProcedure
 
@@ -108,6 +115,101 @@ Procedure.i PrintLumpInfo(Path.s, Name.s)
   ProcedureReturn #DoomPB_ExitOk
 EndProcedure
 
+; Loads PLAYPAL and TITLEPIC, decodes them, composites into the indexed
+; framebuffer and presents a 3x nearest-neighbour window. Prints metadata only;
+; no payload bytes are emitted.
+Procedure.i ShowTitle(Path.s)
+  Protected palIndex.i
+  Protected titleIndex.i
+  Protected palSize.q
+  Protected titleSize.q
+  Protected palBytes.i = 0
+  Protected titleBytes.i = 0
+  Protected pal.PaletteSet
+  Protected pic.PatchImage
+  Protected fb.FrameBuffer
+  Protected exitCode.i = #DoomPB_ExitFailure
+  Protected errorText.s = ""
+
+  If WADOpen(Path) = #False
+    PrintN(#DoomPB_Name + ": " + WADLastError())
+    ProcedureReturn #DoomPB_ExitFailure
+  EndIf
+
+  palIndex = WADFindLump("PLAYPAL")
+  titleIndex = WADFindLump("TITLEPIC")
+
+  If palIndex < 0
+    errorText = "PLAYPAL not found: " + WADLastError()
+  ElseIf titleIndex < 0
+    errorText = "TITLEPIC not found: " + WADLastError()
+  Else
+    palSize = WADLumpSize(palIndex)
+    titleSize = WADLumpSize(titleIndex)
+    If palSize <= 0
+      errorText = "PLAYPAL is empty."
+    ElseIf titleSize <= 0
+      errorText = "TITLEPIC is empty."
+    Else
+      palBytes = AllocateMemory(palSize)
+      titleBytes = AllocateMemory(titleSize)
+      If palBytes = 0 Or titleBytes = 0
+        errorText = "Out of memory while reading TITLEPIC resources."
+      ElseIf WADReadLump(palIndex, palBytes, palSize) = #False
+        errorText = "Cannot read PLAYPAL: " + WADLastError()
+      ElseIf WADReadLump(titleIndex, titleBytes, titleSize) = #False
+        errorText = "Cannot read TITLEPIC: " + WADLastError()
+      Else
+        WADClose()
+
+        If PaletteDecode(palBytes, palSize, @pal) = #False
+          errorText = "Cannot decode PLAYPAL: " + PaletteLastError()
+        ElseIf PatchDecode(titleBytes, titleSize, @pic) = #False
+          errorText = "Cannot decode TITLEPIC: " + PatchLastError()
+        Else
+          FreeMemory(palBytes)
+          palBytes = 0
+          FreeMemory(titleBytes)
+          titleBytes = 0
+
+          If FrameBufferCreate(@fb, pic\Width, pic\Height) = #False
+            errorText = "Cannot create framebuffer: " + FrameBufferLastError()
+          ElseIf FrameBufferClear(@fb, 0) = #False
+            errorText = "Cannot clear framebuffer: " + FrameBufferLastError()
+          ElseIf FrameBufferBlitPatch(@fb, @pic, 0, 0) = #False
+            errorText = "Cannot blit TITLEPIC: " + FrameBufferLastError()
+          Else
+            PrintN(#DoomPB_Name + " " + #DoomPB_Version)
+            PrintN("TITLEPIC: " + Str(pic\Width) + "x" + Str(pic\Height) + " -> " + Str(pic\Width * 3) + "x" + Str(pic\Height * 3) + " (3x nearest-neighbour).")
+            PrintN("Close the window to exit.")
+            If VideoShowFramebuffer(@fb, @pal, 3) = #False
+              errorText = "Cannot show TITLEPIC: " + VideoLastError()
+            Else
+              exitCode = #DoomPB_ExitOk
+            EndIf
+          EndIf
+        EndIf
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText <> ""
+    PrintN(#DoomPB_Name + ": " + errorText)
+  EndIf
+
+  If palBytes <> 0
+    FreeMemory(palBytes)
+  EndIf
+  If titleBytes <> 0
+    FreeMemory(titleBytes)
+  EndIf
+  FrameBufferReset(@fb)
+  PatchReset(@pic)
+  PaletteReset(@pal)
+  WADClose()
+  ProcedureReturn exitCode
+EndProcedure
+
 Define argumentCount.i
 Define argument.s
 Define exitCode.i = #DoomPB_ExitOk
@@ -115,6 +217,7 @@ Define wadPath.s = ""
 Define dumpInfo.i = #False
 Define lumpInfo.i = #False
 Define lumpName.s = ""
+Define showTitle.i = #False
 Define sawIwad.i = #False
 Define index.i
 Define parseError.s = ""
@@ -141,6 +244,9 @@ ElseIf argumentCount = 1
       exitCode = #DoomPB_ExitUsage
     Case "--lump-info"
       PrintUsageError("'--lump-info' requires '--iwad <path> <name>'.")
+      exitCode = #DoomPB_ExitUsage
+    Case "--show-title"
+      PrintUsageError("'--show-title' requires '--iwad <path>'.")
       exitCode = #DoomPB_ExitUsage
     Default
       PrintUsageError("unknown option '" + argument + "'.")
@@ -185,6 +291,12 @@ Else
             lumpInfo = #True
           EndIf
         EndIf
+      Case "--show-title"
+        If showTitle
+          parseError = "duplicate '--show-title' option."
+        Else
+          showTitle = #True
+        EndIf
       Default
         parseError = "unknown option '" + argument + "'."
     EndSelect
@@ -194,21 +306,26 @@ Else
   If parseError <> ""
     PrintUsageError(parseError)
     exitCode = #DoomPB_ExitUsage
-  ElseIf dumpInfo And lumpInfo
-    PrintUsageError("'--dump-info' and '--lump-info' cannot be combined.")
+  ElseIf dumpInfo + lumpInfo + showTitle > 1
+    PrintUsageError("only one of '--dump-info', '--lump-info' and '--show-title' may be used.")
     exitCode = #DoomPB_ExitUsage
   ElseIf dumpInfo And sawIwad
     exitCode = DumpWadInfo(wadPath)
   ElseIf lumpInfo And sawIwad
     exitCode = PrintLumpInfo(wadPath, lumpName)
+  ElseIf showTitle And sawIwad
+    exitCode = ShowTitle(wadPath)
   ElseIf dumpInfo
     PrintUsageError("'--dump-info' requires '--iwad <path>'.")
     exitCode = #DoomPB_ExitUsage
   ElseIf lumpInfo
     PrintUsageError("'--lump-info' requires '--iwad <path> <name>'.")
     exitCode = #DoomPB_ExitUsage
+  ElseIf showTitle
+    PrintUsageError("'--show-title' requires '--iwad <path>'.")
+    exitCode = #DoomPB_ExitUsage
   ElseIf sawIwad
-    PrintUsageError("'--iwad' requires '--dump-info' or '--lump-info <name>'.")
+    PrintUsageError("'--iwad' requires '--dump-info', '--lump-info <name>' or '--show-title'.")
     exitCode = #DoomPB_ExitUsage
   Else
     PrintUsageError("no action specified.")

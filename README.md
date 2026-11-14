@@ -5,11 +5,13 @@ in **PureBasic**. The goal is to reproduce the behaviour of id Software's
 **Linux Doom 1.10** — software renderer, fixed-point arithmetic, 35 Hz game
 ticks and WAD compatibility — rather than to reimagine it.
 
-> **Status: `0.0.1` — M0, M1-01 and M1-02 complete; M1-03 in progress.**
-> The executable can validate a WAD, look up lumps, read raw payloads, decode
-> `PLAYPAL` palettes and decode Doom picture/patch lumps into indexed pixels
-> plus a transparency mask. Presenting `TITLEPIC` in a window (M1-04), the
-> renderer and gameplay are not implemented yet.
+> **Status: `0.1.0` — milestone M1 complete on Windows x64.**
+> The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`
+> and Doom patches, composites them into an indexed software framebuffer and
+> presents `TITLEPIC` in a native 960x600 window at 3x nearest-neighbour.
+> The title screen was visually verified. Linux x64 runtime is **NOT RUN**.
+> Gameplay, the world renderer and release tagging beyond the owner-controlled
+> `v0.1.0` step are not implemented yet.
 
 ## Legal notice
 
@@ -23,9 +25,9 @@ must never be committed to this repository.
 
 - **PureBasic 6.41** (full edition) with its command line compiler
   (`pbcompiler`).
-- **Windows x64** is the primary development target. **Linux x64** is a required
-  target for 1.0; the Bash scripts currently run only where a Linux PureBasic
-  installation is available.
+- **Windows x64** is the primary development and verification target for
+  `0.1.0`. **Linux x64** is a required target for 1.0; the Bash scripts exist
+  but Linux runtime remains **NOT RUN** in this release.
 - No third-party libraries, SDL, C/C++ engine or external game runtime.
 
 ## Building
@@ -53,6 +55,9 @@ repository.
 # Build the palette/patch decoder tests -> build/DoomPB-WadGraphicsTests.exe
 ./scripts/build.ps1 -GraphicsTest
 
+# Build the framebuffer/presentation tests -> build/DoomPB-WadDisplayTests.exe
+./scripts/build.ps1 -DisplayTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -75,16 +80,20 @@ repository.
 # Build the palette/patch decoder tests -> build/DoomPB-WadGraphicsTests
 ./scripts/build.sh --graphics-test
 
+# Build the framebuffer/presentation tests -> build/DoomPB-WadDisplayTests
+./scripts/build.sh --display-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, all three synthetic WAD
-test suites (header/directory, lump lookup/payload and PLAYPAL/patch decoding),
-and smoke tests against the produced executable. They need no game data and no
-graphical display.
+The test scripts run a real syntax check, a real build, all four synthetic WAD
+test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding and
+framebuffer/presentation), and smoke tests against the produced executable.
+They need no game data and no graphical display; no window is opened by the
+automated suite.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -103,14 +112,19 @@ DoomPB --version                         Print the version and exit.
 DoomPB --help                            Print usage information and exit.
 DoomPB --iwad <path> --dump-info         Print WAD header/directory metadata.
 DoomPB --iwad <path> --lump-info <name>  Print one lump's index, offset and size.
+DoomPB --iwad <path> --show-title        Show TITLEPIC in a 3x window.
 DoomPB                                   Print the bootstrap status and exit.
 ```
 
 `--dump-info` prints only container metadata (type, file size, lump count,
 directory offset). `--lump-info` performs the same case-insensitive,
-last-duplicate-wins name lookup as the WAD API and prints metadata only. Neither
-option prints lump contents. A missing or malformed WAD, or a missing lump, is
-reported with a non-zero exit code.
+last-duplicate-wins name lookup as the WAD API and prints metadata only.
+`--show-title` loads `PLAYPAL` and `TITLEPIC`, decodes them, composites into the
+indexed framebuffer and opens a native window with a 960x600 client area
+(320x200 at exact 3x nearest-neighbour). The window blocks until it is closed;
+closing it exits with code 0. None of these options prints lump contents. A
+missing or malformed WAD, a missing lump or a graphics failure is reported with
+a non-zero exit code.
 
 | Exit code | Meaning |
 |---|---|
@@ -138,9 +152,6 @@ WADReadLump(Index, Destination, Cap)  -> #True / #False
 - Each nonempty read reopens the WAD read-only, rejects a changed file size,
   revalidates 64-bit bounds and closes the handle on every path. A short read
   may leave the destination partially modified and is reported as an error.
-
-`PLAYPAL` and patch decoding are implemented in `src/Graphics/`; presenting
-`TITLEPIC` in a window belongs to M1-04 and is **not implemented yet**.
 
 ## Graphics API
 
@@ -175,13 +186,50 @@ PatchOpaqueAt(*PatchImage, X, Y)           -> 0/1, or -1
   actionable error; partial output is released. `PatchLastError()` and
   `PaletteLastError()` report the last failure.
 
+## Framebuffer and presentation
+
+`src/Graphics/FrameBuffer.pbi` is platform-independent and owns a row-major
+8-bit palette-index plane:
+
+```text
+FrameBufferCreate(*Fb, Width, Height)
+FrameBufferReset(*Fb)
+FrameBufferClear(*Fb, PaletteIndex)
+FrameBufferSetPixel(*Fb, X, Y, PaletteIndex)
+FrameBufferGetPixel(*Fb, X, Y)
+FrameBufferBlitPatch(*Fb, *PatchImage, X, Y)
+FrameBufferConvertRGBA(*Fb, *PaletteSet, PaletteIndex, *Destination, Capacity)
+FrameBufferScaleNearestRGBA(*Fb, *PaletteSet, PaletteIndex, Scale, *Destination, Capacity)
+```
+
+- `FrameBuffer` is caller-owned and zero-initialized once; `Create` owns the
+  index plane, `Reset` frees it and is idempotent. Failed creation leaves an
+  empty framebuffer.
+- Patch blits honor the opaque mask: masked pixels never overwrite the
+  destination. Clipping is safe at all four edges; a fully offscreen blit is a
+  successful no-op. Patch origin offsets are metadata, not applied implicitly.
+- Conversion emits canonical row-major RGBA bytes (`R, G, B, 255`) from palette
+  0..255 values with no scaling, gamma or colour-space changes.
+- `FrameBufferScaleNearestRGBA` maps every source pixel to an exact
+  `Scale x Scale` block. The window uses scale 3, so 320x200 becomes 960x600.
+  That is square-pixel 8:5, **not** the historical CRT 4:3 stretch.
+
+`src/Graphics/Video.pbi` is the only module that touches window/image APIs. It
+creates a centered native window, uploads the RGBA buffer respecting
+`DrawingBufferPitch()`, `DrawingBufferPixelFormat()` and
+`#PB_PixelFormat_ReversedY`, displays the image through `ImageGadget()` and
+waits for `#PB_Event_CloseWindow` without a busy loop. All window, image and
+RGBA resources are released on close and on every failure path. Automated tests
+do not open a window; visual acceptance of the title screen remains an owner
+check.
+
 ## Repository layout
 
 ```text
 src/        PureBasic sources (DoomPB.pb is the entry point)
 src/Core/   shared primitives (little-endian decoding, later fixed-point math)
 src/WAD/    WAD container reader, name lookup and payload reads
-src/Graphics/ PLAYPAL palette decoding and Doom patch decoding
+src/Graphics/ decoders, indexed framebuffer and window presentation
 tests/unit/ self-contained tests with synthetic, generated fixtures
 scripts/    build/test scripts for Windows (PowerShell) and Linux (Bash)
 docs/       development plan, porting notes and task descriptions

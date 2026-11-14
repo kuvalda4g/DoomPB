@@ -8,7 +8,11 @@ contain guesses, invented upstream commit hashes or copied game data.
 | Milestone | State | Notes |
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
-| M1 — WAD loader and `TITLEPIC` | in progress | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`; M1-03 (`PLAYPAL` and patch decoders) implemented locally and not yet committed; presenting `TITLEPIC` belongs to M1-04 |
+| M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
+
+Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
+x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
+tag are owner-controlled and have not been created.
 
 `src/DoomPB.pb`, `src/Core/Endian.pbi` and `src/WAD/WAD.pbi` are original
 PureBasic code written for DoomPB. The WAD container parsing reproduces the
@@ -268,6 +272,82 @@ Verified behaviour:
   dimensions, opaque count, corner pixels and pixel checksum; its mask value is
   identical modulo a leading-zero formatting artefact. This is a structural and
   checksum cross-check, not proof of pixel-perfect equivalence with a renderer.
+
+## M1-04 — framebuffer and TITLEPIC presentation
+
+Original C behavior consulted (same pinned revision):
+
+- `V_DrawPatch` (`v_video.c`): post `topdelta` is an absolute row, pixels start
+  at `column + 3`, the next post is `length + 4` bytes later, and `leftoffset` /
+  `topoffset` are applied only at draw time.
+- `D_PageDrawer` (`d_main.c`): draws a page with `V_DrawPatch(0, 0, ...)`.
+- Palette usage (`d_main.c` / `I_SetPalette`): palette 0 is the normal display
+  palette and channels are raw 0–255 RGB.
+- No original C code exists for window creation in this port; `Video.pbi` is a
+  modern PureBasic presentation adapter, not an engine algorithm.
+
+Framebuffer (`src/Graphics/FrameBuffer.pbi`):
+
+- Authoritative data is a contiguous row-major plane of 8-bit palette indices,
+  classic size 320x200. The module has no window, image or OS dependency.
+- `FrameBuffer` is caller-owned and zero-initialized once. `FrameBufferCreate`
+  owns the plane, `FrameBufferReset` frees it and is idempotent; failed creation
+  leaves an empty framebuffer.
+- `FrameBufferBlitPatch` composites a decoded patch through its opacity mask:
+  mask 0 leaves the destination unchanged, mask 1 copies the index verbatim
+  (including 255). Coordinates are clipped at all four edges; fully offscreen
+  blits are successful no-ops. `LeftOffset`/`TopOffset` are not applied here.
+- Caps: dimensions 1–4096, at most 16,777,216 pixels. Indices are validated to
+  0–255; all writes are bounds-checked.
+- Conversion emits canonical RGBA (`R, G, B, 255`) and accepts a palette index
+  plus caller-owned destination/capacity. No VGA scaling, gamma or BGR swap is
+  applied. `FrameBufferScaleNearestRGBA` maps each source pixel to an exact
+  `Scale x Scale` block; it is CPU-side and testable without a GUI.
+
+Presentation (`src/Graphics/Video.pbi`):
+
+- A centered window with an inner client area of 960x600 displays a 320x200
+  source at exact 3x nearest-neighbour. `ImageGadget()` owns the visible image.
+- RGBA upload respects `DrawingBufferPitch()`, the reported pixel format and
+  `#PB_PixelFormat_ReversedY`; unsupported formats fall back to `Plot()`.
+- `WaitWindowEvent()` blocks until `#PB_Event_CloseWindow`; there is no busy
+  loop and no upload on idle events. Image, window and RGBA resources are
+  released on normal close and every failure path.
+- The process remains a console application, so `--show-title` also leaves the
+  console attached. This is intentional for the diagnostic messages.
+
+CLI:
+
+- `DoomPB --iwad <path> --show-title` loads only `PLAYPAL` and `TITLEPIC` via
+  the existing WAD APIs, decodes into `PaletteSet`/`PatchImage`, composites into
+  the framebuffer, presents the window and exits 0 after it closes.
+- Missing/empty/corrupt resources or graphics failures exit 1 with a diagnostic.
+  Bad syntax, duplicate options or conflicting actions exit 2. No other option
+  opens a window.
+
+Intentional differences and limitations:
+
+- The 960x600 display is square-pixel 8:5, not the historical CRT 4:3 stretch.
+  No aspect-ratio correction is implemented in M1-04.
+- Presentation is static (one upload per window). It is not yet a
+  high-performance gameplay renderer.
+- No Win32 window handles, SDL, OpenGL, DLL wrapper or image library is used.
+- No screenshot, image export or commercial asset is produced by the code or
+  tests.
+
+Verified behaviour:
+
+- `tests/unit/wad_display_tests.pb` covers F01–F24: 24 cases, 199 assertions.
+- Local Ultimate Doom integration (read-only): `PLAYPAL` decodes to 14 palettes;
+  `TITLEPIC` is 320x200 with 64,000 opaque pixels, pixel FNV-1a64
+  `19C7668B2DF19A1A` and mask FNV-1a64 `C68BF664EFA3E525`.
+- Programmatic Windows check: the window titled `DoomPB - TITLEPIC (M1-04)`
+  reports a 960x600 client area, closes through WM_CLOSE with exit code 0, and
+  a second launch behaves identically.
+- Visible-window review: **PASS**. A client-area capture showed the correct
+  Ultimate Doom title screen, correct RGB colours, no artifacts, exact 3x
+  nearest-neighbour blocks and no cropping. The local capture is kept only in
+  the ignored `build/` directory and must not be committed or published.
 
 ## Compatibility conventions adopted so far
 

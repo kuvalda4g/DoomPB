@@ -4,10 +4,11 @@
 
 .DESCRIPTION
     Performs a real PureBasic syntax check, a real build, the synthetic WAD
-    header/directory, lump lookup/payload and PLAYPAL/patch decoder unit tests,
-    and smoke tests against the produced executable: --version, --help,
-    no-argument startup, unknown-option handling and --lump-info argument
-    validation. No commercial game data and no display are needed.
+    header/directory, lump lookup/payload, PLAYPAL/patch decoder and
+    framebuffer/presentation unit tests, and smoke tests against the produced
+    executable: --version, --help, no-argument startup, unknown-option handling,
+    --lump-info argument validation and nonblocking --show-title failures. No
+    commercial game data and no display are needed.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -31,6 +32,7 @@ $exePath     = Join-Path $repoRoot 'build\DoomPB.exe'
 $unitTestExe = Join-Path $repoRoot 'build\DoomPB-WadTests.exe'
 $lumpTestExe = Join-Path $repoRoot 'build\DoomPB-WadLumpTests.exe'
 $graphicsTestExe = Join-Path $repoRoot 'build\DoomPB-WadGraphicsTests.exe'
+$displayTestExe = Join-Path $repoRoot 'build\DoomPB-WadDisplayTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -50,11 +52,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -135,17 +137,35 @@ $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "synthetic WAD lump tests exit with 0 (got $status)"
 
 Write-Host ''
+Write-Host '== WAD framebuffer/presentation test build =='
+$status = Invoke-BuildStep -Check -DisplayTest
+Test-Condition ($status -eq 0) "WAD display test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -DisplayTest
+Test-Condition ($status -eq 0) "WAD display test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $displayTestExe -PathType Leaf) "WAD display test output exists: $displayTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $displayTestExe -PathType Leaf)) {
+    Write-Host "Aborting: WAD display test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
 Write-Host '== WAD PLAYPAL/patch decoder unit tests =='
 & $graphicsTestExe
 $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "synthetic WAD graphics tests exit with 0 (got $status)"
 
 Write-Host ''
+Write-Host '== WAD framebuffer/presentation unit tests =='
+& $displayTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic WAD display tests exit with 0 (got $status)"
+
+Write-Host ''
 Write-Host '== Smoke tests =='
 
 $result = Invoke-DoomPB -Arguments @('--version')
 Test-Condition ($result.ExitCode -eq 0) "--version exits with 0 (got $($result.ExitCode))"
-Test-Condition ($result.Output -match '(?m)^DoomPB 0\.0\.1\s*$') "--version prints 'DoomPB 0.0.1' (got: $($result.Output.Trim()))"
+Test-Condition ($result.Output -match '(?m)^DoomPB 0\.1\.0\s*$') "--version prints 'DoomPB 0.1.0' (got: $($result.Output.Trim()))"
 
 $result = Invoke-DoomPB -Arguments @('--help')
 Test-Condition ($result.ExitCode -eq 0) "--help exits with 0 (got $($result.ExitCode))"
@@ -172,6 +192,15 @@ Test-Condition ($result.ExitCode -eq 1) "--lump-info with a missing WAD exits wi
 
 $result = Invoke-DoomPB -Arguments @('--dump-info', '--lump-info', 'PLAYPAL')
 Test-Condition ($result.ExitCode -eq 2) "--dump-info and --lump-info conflict exits with 2 (got $($result.ExitCode))"
+
+$result = Invoke-DoomPB -Arguments @('--show-title')
+Test-Condition ($result.ExitCode -eq 2) "--show-title without --iwad exits with 2 (got $($result.ExitCode))"
+
+$result = Invoke-DoomPB -Arguments @('--iwad', 'definitely-missing-doompb.wad', '--show-title')
+Test-Condition ($result.ExitCode -eq 1) "--show-title with a missing WAD exits with 1 (got $($result.ExitCode))"
+
+$result = Invoke-DoomPB -Arguments @('--dump-info', '--show-title')
+Test-Condition ($result.ExitCode -eq 2) "--dump-info and --show-title conflict exits with 2 (got $($result.ExitCode))"
 
 Write-Host ''
 if ($script:failures -ne 0) {

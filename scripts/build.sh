@@ -21,10 +21,11 @@ CHECK_ONLY=0
 TEST_BUILD=0
 LUMP_TEST_BUILD=0
 GRAPHICS_TEST_BUILD=0
+DISPLAY_TEST_BUILD=0
 
 usage() {
     cat <<'EOF'
-Usage: build.sh [--check | --test | --lump-test | --graphics-test] [--help]
+Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-test] [--help]
 
   (no option)   Syntax-check and build build/DoomPB.
   -k, --check   Run the PureBasic syntax check only.
@@ -33,6 +34,8 @@ Usage: build.sh [--check | --test | --lump-test | --graphics-test] [--help]
                 Build the WAD lump lookup/payload test program instead.
   -g, --graphics-test
                 Build the PLAYPAL/patch decoder test program instead.
+  -d, --display-test
+                Build the framebuffer/presentation test program instead.
   -h, --help    Show this help and exit.
 
 Compiler discovery: PB_COMPILER, then pbcompiler on PATH, then common
@@ -91,6 +94,9 @@ while [ $# -gt 0 ]; do
         -g|--graphics-test)
             GRAPHICS_TEST_BUILD=1
             ;;
+        -d|--display-test)
+            DISPLAY_TEST_BUILD=1
+            ;;
         -h|--help)
             usage
             exit 0
@@ -106,9 +112,9 @@ done
 
 [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 
-selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD))
+selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD + DISPLAY_TEST_BUILD))
 if [ "${selected_targets}" -gt 1 ]; then
-    fail '--test, --lump-test and --graphics-test select different programs; choose one.'
+    fail '--test, --lump-test, --graphics-test and --display-test select different programs; choose one.'
 fi
 
 if [ "${TEST_BUILD}" -eq 1 ]; then
@@ -126,6 +132,12 @@ fi
 if [ "${GRAPHICS_TEST_BUILD}" -eq 1 ]; then
     SOURCE_FILE="${REPO_ROOT}/tests/unit/wad_graphics_tests.pb"
     OUTPUT_FILE="${BUILD_DIR}/DoomPB-WadGraphicsTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
+
+if [ "${DISPLAY_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/unit/wad_display_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-WadDisplayTests"
     [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 fi
 
