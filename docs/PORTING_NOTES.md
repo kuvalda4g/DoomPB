@@ -9,7 +9,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
-| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`; M2-02 TEXTURE1/TEXTURE2 decoding and PNAMES resolution implemented locally, not yet committed; composite texture assembly and maps pending |
+| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`, M2-02 as `96c793a`; M2-03 composite wall textures implemented locally, not yet committed; maps and renderer pending |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -492,6 +492,77 @@ Verified behaviour:
   resolved; first texture is 24x72 with 2 patches; metadata FNV-1a64
   `FF132795FFDEA1DB`.
 - The M1 suites, `--show-title` and the `0.1.0` version remain unchanged.
+
+## M2-03 — composite wall textures
+
+Original C symbols consulted (same pinned revision):
+
+- `R_GenerateComposite`: walks texture patches in definition order, clips
+  placement columns to the texture and composites cached columns.
+- `R_DrawColumnInCache`: clips a patch column against the texture height using
+  the placement origin and post topdelta.
+- `R_GenerateLookup` / `R_GetColumn`: original column-oriented lookup/caching
+  representation, consulted only to keep semantics clear.
+- `texpatch_t` / `texture_t`: placement origin, PNAMES index and ordered patch
+  list from M2-02.
+
+Port mapping:
+
+- `src/Graphics/Texture.pbi`: `TextureImage`, `TextureCompose`,
+  `TextureImageReset`, `TextureImageGetPixel`, `TextureImageIsOpaque`,
+  `TextureImageOpaqueCount`, `TextureLastError`.
+
+Composition semantics:
+
+- Output is a row-major 8-bit palette-index plane plus a separate opacity mask,
+  owned by the caller-facing `TextureImage`.
+- Placements are processed in definition order. Opaque source pixels overwrite
+  destination pixels and set mask=1; transparent pixels leave both untouched.
+- Signed placement origins are clipped on all four edges. A placement entirely
+  outside the texture is a successful no-op.
+- `PatchImage.LeftOffset/TopOffset` are internal patch alignment and are never
+  applied again to a texture placement.
+- Uncovered pixels are index 0 with mask 0. Palette index 255 is an ordinary
+  opaque index. No COLORMAP, RGB, alpha, filtering or scaling is applied.
+- Source patch lumps are read with `WADReadLump`, decoded with `PatchDecode`,
+  and released immediately. The output does not alias WAD or patch buffers.
+
+Validation and failure policy:
+
+- Requires a valid catalog, a valid texture index and an open WAD.
+- Rechecks width/height and the 16,777,216-pixel budget before allocating two
+  planes. Catalog dimension/patch caps still apply from M2-02.
+- Unresolved patches, zero-length lumps, malformed patch payloads and allocation
+  failures are controlled errors. Partial output is freed and the result is
+  left empty. Repeated compose/reset is safe.
+- Resolved WAD indices are valid for the current WAD session only. After
+  `WADClose()`/`WADOpen()`, callers must invalidate and re-resolve.
+
+Intentional differences from the original:
+
+- The original builds column lookup tables and a cached-column composite; DoomPB
+  builds a straightforward row-major plane+mask for this milestone. This is a
+  logical per-pixel equivalent, not a claim of bitwise equivalence with
+  `R_GetColumn` or of pixel-perfect future rendering.
+- The original trusts texture/patch data; DoomPB validates indices, sizes,
+  decoded patch data and pixel budgets.
+- No persistent texture/patch cache is introduced. Patches are decoded per
+  placement for correctness and simplicity.
+
+Verified behaviour:
+
+- `tests/unit/wad_composite_tests.pb` covers X01–X30: 30 cases, 141
+  assertions.
+- Local Ultimate Doom 1.9ud: all 287 resolved textures compose successfully
+  (0 failures) across 980 placements; total opaque pixels 3,595,870.
+- Samples: single-patch texture index 2, 128x128, 1 patch, 16,384 opaque,
+  FNV-1a64 `19B3B7BBB6ABA081`; multi-patch index 0, 24x72, 2 patches, 1,728
+  opaque, `4B883C3FBD63C982`; sparse index 4, 128x128, 1 patch, 11,838 opaque,
+  `35F45DEFF60309BA`. Repeated composition of index 0 produced an identical
+  checksum.
+- The test suite asserts hand-computed exact pixel layouts for single, clipped,
+  overlapping, sparse and offset cases, providing an independent expected
+  reference rather than relying only on self-derived hashes.
 
 ## Compatibility conventions adopted so far
 

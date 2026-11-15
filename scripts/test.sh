@@ -4,10 +4,11 @@
 #
 # Performs a real PureBasic syntax check, a real build, the synthetic WAD
 # header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/presentation,
-# COLORMAP/PNAMES and TEXTURE1/TEXTURE2 definition unit tests, and smoke tests
-# against the produced executable: --version, --help, no-argument startup,
-# unknown-option handling, --lump-info argument validation and nonblocking
-# --show-title failures. No commercial game data and no display are needed.
+# COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definition and composite wall-texture unit
+# tests, and smoke tests against the produced executable: --version, --help,
+# no-argument startup, unknown-option handling, --lump-info argument validation
+# and nonblocking --show-title failures. No commercial game data and no display
+# are needed.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -24,6 +25,7 @@ GRAPHICS_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadGraphicsTests"
 DISPLAY_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadDisplayTests"
 RESOURCE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadResourceTests"
 TEXTURE_DEF_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadTextureDefsTests"
+COMPOSITE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadCompositeTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -358,6 +360,50 @@ if [ "${texture_status}" -eq 0 ]; then
     printf 'PASS: synthetic WAD texture definition tests exit with 0\n'
 else
     printf 'FAIL: synthetic WAD texture definition tests exit with %s\n' "${texture_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== WAD composite texture test build ==\n'
+run_build --check --composite-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD composite test syntax check exits with 0\n'
+else
+    printf 'FAIL: WAD composite test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD composite test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --composite-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD composite test build exits with 0\n'
+else
+    printf 'FAIL: WAD composite test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD composite test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${COMPOSITE_TEST_BIN}" ]; then
+    printf 'PASS: WAD composite test output exists: %s\n' "${COMPOSITE_TEST_BIN}"
+else
+    printf 'FAIL: WAD composite test output missing: %s\n' "${COMPOSITE_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD composite test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== WAD composite texture unit tests ==\n'
+"${COMPOSITE_TEST_BIN}"
+composite_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${composite_status}" -eq 0 ]; then
+    printf 'PASS: synthetic WAD composite tests exit with 0\n'
+else
+    printf 'FAIL: synthetic WAD composite tests exit with %s\n' "${composite_status}" >&2
     FAILURES=$((FAILURES + 1))
 fi
 

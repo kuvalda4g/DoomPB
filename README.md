@@ -9,9 +9,10 @@ ticks and WAD compatibility — rather than to reimagine it.
 > The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`
 > and Doom patches, composites them into an indexed software framebuffer and
 > presents `TITLEPIC` in a native 960x600 window at 3x nearest-neighbour.
-> M2 adds `COLORMAP`, `PNAMES` and `TEXTURE1`/`TEXTURE2` definition parsing with
-> PNAMES-to-WAD patch resolution; texture pixel composition, maps, the world
-> renderer and gameplay are still pending. Linux x64 runtime is **NOT RUN**.
+> M2 adds `COLORMAP`, `PNAMES`, `TEXTURE1`/`TEXTURE2` definitions, PNAMES-to-WAD
+> resolution and composite wall-texture assembly into indexed pixels plus a
+> mask. Maps, the world renderer and gameplay are still pending. Linux x64
+> runtime is **NOT RUN**.
 
 ## Legal notice
 
@@ -64,6 +65,9 @@ repository.
 # Build the TEXTURE1/TEXTURE2 tests -> build/DoomPB-WadTextureDefsTests.exe
 ./scripts/build.ps1 -TextureDefTest
 
+# Build the composite texture tests -> build/DoomPB-WadCompositeTests.exe
+./scripts/build.ps1 -CompositeTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -95,17 +99,21 @@ repository.
 # Build the TEXTURE1/TEXTURE2 tests -> build/DoomPB-WadTextureDefsTests
 ./scripts/build.sh --texture-def-test
 
+# Build the composite texture tests -> build/DoomPB-WadCompositeTests
+./scripts/build.sh --composite-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, all six synthetic WAD
+The test scripts run a real syntax check, a real build, all seven synthetic WAD
 test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding,
-framebuffer/presentation, COLORMAP/PNAMES and TEXTURE1/TEXTURE2 definitions),
-and smoke tests against the produced executable. They need no game data and no
-graphical display; no window is opened by the automated suite.
+framebuffer/presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definitions and
+composite wall textures), and smoke tests against the produced executable. They
+need no game data and no graphical display; no window is opened by the automated
+suite.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -278,6 +286,39 @@ TextureCatalogGetResolvedPatchLump(*Catalog, TextureIndex, PatchIndex)
   `WADOpen()`, call `TextureCatalogInvalidateResolved()` or resolve again.
 - Result structures are caller-owned and zero-initialized once; all metadata is
   privately copied. `Reset` frees it, is idempotent and is safe after failures.
+
+## Composite wall textures (M2-03)
+
+`src/Graphics/Texture.pbi` assembles a resolved texture definition into an owned
+indexed image:
+
+```text
+TextureCompose(*Catalog, TextureIndex, *Output)
+TextureImageReset(*Output)
+TextureImageGetPixel(*Output, X, Y)
+TextureImageIsOpaque(*Output, X, Y)
+TextureImageOpaqueCount(*Output)
+TextureLastError()
+```
+
+- Output is a row-major 8-bit palette-index plane plus a separate opacity mask.
+  Uncovered pixels are index 0 with mask 0. Palette index 255 remains opaque.
+- Patch placements are applied in definition order. Later opaque pixels
+  overwrite earlier pixels; transparent source pixels leave the destination and
+  mask unchanged.
+- Signed `originx`/`originy` place the patch; negative and overflowing positions
+  are clipped safely on all four sides. Patch internal `LeftOffset`/`TopOffset`
+  are never applied again.
+- The source patch is read through the existing WAD API, decoded with
+  `PatchDecode`, and released immediately. The output never aliases WAD
+  payloads or decoded patch buffers.
+- A failed compose frees partial allocations and leaves the output empty.
+  Repeated compose/reset is safe.
+- The catalog must be resolved against the currently open WAD. After
+  `WADClose()`/`WADOpen()`, invalidate and re-resolve the catalog.
+- This is a logical row-major composition. It does not port the original
+  column-cache representation or `R_GetColumn`; M3/M4 may add renderer-specific
+  column access separately.
 
 ## Framebuffer and presentation
 

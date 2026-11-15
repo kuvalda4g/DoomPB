@@ -38,6 +38,10 @@
     Build the synthetic TEXTURE1/TEXTURE2 definition unit-test program
     (tests/unit/wad_texture_defs_tests.pb) instead of the main executable.
 
+.PARAMETER CompositeTest
+    Build the synthetic composite wall-texture unit-test program
+    (tests/unit/wad_composite_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -62,6 +66,9 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -TextureDefTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -CompositeTest
 #>
 [CmdletBinding()]
 param(
@@ -72,6 +79,7 @@ param(
     [switch]$DisplayTest,
     [switch]$ResourceTest,
     [switch]$TextureDefTest,
+    [switch]$CompositeTest,
     [string]$CompilerPath = ''
 )
 
@@ -88,12 +96,16 @@ if ($GraphicsTest) { $selectedTargets++ }
 if ($DisplayTest) { $selectedTargets++ }
 if ($ResourceTest) { $selectedTargets++ }
 if ($TextureDefTest) { $selectedTargets++ }
+if ($CompositeTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($TextureDefTest) {
+if ($CompositeTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\wad_composite_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-WadCompositeTests.exe'
+} elseif ($TextureDefTest) {
     $sourceFile = Join-Path $repoRoot 'tests\unit\wad_texture_defs_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-WadTextureDefsTests.exe'
 } elseif ($ResourceTest) {
