@@ -30,6 +30,10 @@
     Build the synthetic framebuffer/presentation unit-test program
     (tests/unit/wad_display_tests.pb) instead of the main executable.
 
+.PARAMETER ResourceTest
+    Build the synthetic COLORMAP/PNAMES unit-test program
+    (tests/unit/wad_resource_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -48,6 +52,9 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -DisplayTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -ResourceTest
 #>
 [CmdletBinding()]
 param(
@@ -56,6 +63,7 @@ param(
     [switch]$LumpTest,
     [switch]$GraphicsTest,
     [switch]$DisplayTest,
+    [switch]$ResourceTest,
     [string]$CompilerPath = ''
 )
 
@@ -70,12 +78,16 @@ if ($Test) { $selectedTargets++ }
 if ($LumpTest) { $selectedTargets++ }
 if ($GraphicsTest) { $selectedTargets++ }
 if ($DisplayTest) { $selectedTargets++ }
+if ($ResourceTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
-    Write-Host 'error: -Test, -LumpTest, -GraphicsTest and -DisplayTest select different programs; choose one.' -ForegroundColor Red
+    Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($DisplayTest) {
+if ($ResourceTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\wad_resource_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-WadResourceTests.exe'
+} elseif ($DisplayTest) {
     $sourceFile = Join-Path $repoRoot 'tests\unit\wad_display_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-WadDisplayTests.exe'
 } elseif ($GraphicsTest) {

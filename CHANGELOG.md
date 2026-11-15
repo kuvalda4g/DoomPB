@@ -3,6 +3,30 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
+## [Unreleased]
+
+Milestone M2 in progress. The application version remains `0.1.0`; this section
+is not a `0.2.0` release note.
+
+### Added
+
+- `COLORMAP` decoder with raw 256-byte light/effect tables, indexed lookups,
+  bounds checks and caller-owned storage (`src/Graphics/Colormap.pbi`).
+- `PNAMES` decoder with signed count handling, raw eight-byte patch names,
+  order/duplicate preservation and safe display helpers
+  (`src/Graphics/PNames.pbi`).
+- Synthetic C01-C13/N01-N15 test suite plus WAD integration I01-I03.
+- `-ResourceTest` / `--resource-test` build target.
+
+### Verified
+
+- Windows x64, PureBasic 6.41: complete suite passes with 40/40 script checks.
+- New resource tests: 28 synthetic cases plus 3 integration cases.
+- Local Ultimate Doom `COLORMAP`: 8,704 bytes, 34 maps.
+- Local `PNAMES`: 2,812 bytes, 351 names, no trailing bytes.
+- M1 regressions and `--show-title` remain green.
+- Linux x64 runtime: **NOT RUN**.
+
 ## [0.1.0] - 2026-11-15
 
 Milestone M1: WAD loader and TITLEPIC. This is the first milestone build; it is

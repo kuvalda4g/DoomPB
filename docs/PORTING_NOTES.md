@@ -9,6 +9,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
+| M2 - Resources and map loading | in progress | M2-01 `COLORMAP`/`PNAMES` decoders implemented locally, not yet committed; texture assembly and maps pending |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -348,6 +349,75 @@ Verified behaviour:
   Ultimate Doom title screen, correct RGB colours, no artifacts, exact 3x
   nearest-neighbour blocks and no cropping. The local capture is kept only in
   the ignored `build/` directory and must not be committed or published.
+
+## M2-01 — COLORMAP and PNAMES resource tables
+
+Original C symbols consulted (same pinned revision):
+
+- `R_InitColormaps` (`r_data.c`): reads the whole `COLORMAP` lump and
+  256-byte-aligns the buffer for the light-table lookups.
+- `R_InitTextures` (`r_data.c`): reads the signed count from `PNAMES`, copies
+  each eight-byte name with `strncpy`, resolves it through
+  `W_CheckNumForName`, and uses the numeric position as the patch lookup index.
+- `W_LumpLength` / `W_ReadLump`: source of the raw payload bytes.
+
+Port mapping:
+
+- `src/Graphics/Colormap.pbi` → `ColormapSet`, `ColormapDecode`,
+  `ColormapCount`, `ColormapLookup`, `ColormapReset`, `ColormapLastError`.
+- `src/Graphics/PNames.pbi` → `PNamesTable`, `PNamesDecode`, `PNamesCount`,
+  `PNamesRawNameByte`, `PNamesDisplayName`, `PNamesReset`, `PNamesLastError`.
+
+COLORMAP semantics:
+
+- The payload is a sequence of 256-byte tables of palette indices. Every byte
+  is copied unchanged; entries are never recalculated from `PLAYPAL`.
+- Length must be positive and exactly divisible by 256; up to 256 tables
+  (65,536 bytes) are accepted. Map and palette indices are bounds-checked.
+- Map 32 (grayscale) and map 33 (extra dark) are ordinary tables from the
+  decoder's point of view; no lighting formula is applied.
+
+PNAMES semantics:
+
+- The signed little-endian count is followed by that many eight-byte raw names.
+  Order, duplicates, NUL padding, embedded NULs, lowercase bytes and high bytes
+  are preserved.
+- Counts above 65,536, negative counts, short headers and tables whose declared
+  bytes do not fit are rejected. Trailing bytes after the declared names are
+  accepted and ignored for compatibility.
+- Name resolution against the WAD is deliberately deferred to M2-02; no
+  `PatchDecode` or texture assembly happens here.
+- Display strings stop at NUL and replace bytes outside 32–126 with `.`; raw
+  access is limited to byte offsets 0..7.
+
+Ownership and failure policy:
+
+- Both result structures are caller-owned and zero-initialized once. The
+  decoder owns a private copy of the bytes; it never borrows the input buffer.
+- `Reset` frees the copy, is idempotent and leaves the structure reusable.
+- A failed replacement clears the previous decoded data. Both modules report
+  actionable text through their `LastError` functions.
+
+Intentional differences from the original:
+
+- The C code trusts the lump size/count and performs little validation. DoomPB
+  rejects null pointers, negative/zero lengths, partial tables, negative counts,
+  oversized counts and truncated name arrays.
+- The original 256-byte alignment of `colormaps` is an engine rendering detail;
+  this decoder stores the same bytes in a normal PureBasic allocation. No
+  alignment-dependent consumer exists yet.
+- PNAMES entries are not resolved eagerly, avoiding cross-module coupling and
+  repeated WAD lookups.
+
+Verified behaviour:
+
+- `tests/unit/wad_resource_tests.pb` covers C01–C13 and N01–N15 (28 synthetic
+  cases) plus synthetic WAD integration I01–I03.
+- Local Ultimate Doom 1.9ud integration: `COLORMAP` is 8,704 bytes / 34 maps
+  (raw/decoded FNV-1a64 `01377C69B4BFFA05`); `PNAMES` is 2,812 bytes with 351
+  names, `4 + 351*8 = 2,812` and no trailing bytes (FNV-1a64
+  `A928B2617C343C48`). No payload tables or name lists are printed.
+- `--show-title` still opens the 960x600 TITLEPIC window and exits 0.
 
 ## Compatibility conventions adopted so far
 

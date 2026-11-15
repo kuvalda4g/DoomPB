@@ -5,13 +5,13 @@ in **PureBasic**. The goal is to reproduce the behaviour of id Software's
 **Linux Doom 1.10** — software renderer, fixed-point arithmetic, 35 Hz game
 ticks and WAD compatibility — rather than to reimagine it.
 
-> **Status: `0.1.0` — milestone M1 complete on Windows x64.**
+> **Status: `0.1.0` — milestone M1 complete on Windows x64; M2 in progress.**
 > The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`
 > and Doom patches, composites them into an indexed software framebuffer and
 > presents `TITLEPIC` in a native 960x600 window at 3x nearest-neighbour.
-> The title screen was visually verified. Linux x64 runtime is **NOT RUN**.
-> Gameplay, the world renderer and release tagging beyond the owner-controlled
-> `v0.1.0` step are not implemented yet.
+> M2-01 adds `COLORMAP` and `PNAMES` resource-table decoders; texture assembly,
+> maps, the world renderer and gameplay are still pending. Linux x64 runtime is
+> **NOT RUN**.
 
 ## Legal notice
 
@@ -58,6 +58,9 @@ repository.
 # Build the framebuffer/presentation tests -> build/DoomPB-WadDisplayTests.exe
 ./scripts/build.ps1 -DisplayTest
 
+# Build the COLORMAP/PNAMES tests -> build/DoomPB-WadResourceTests.exe
+./scripts/build.ps1 -ResourceTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -83,17 +86,20 @@ repository.
 # Build the framebuffer/presentation tests -> build/DoomPB-WadDisplayTests
 ./scripts/build.sh --display-test
 
+# Build the COLORMAP/PNAMES tests -> build/DoomPB-WadResourceTests
+./scripts/build.sh --resource-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, all four synthetic WAD
-test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding and
-framebuffer/presentation), and smoke tests against the produced executable.
-They need no game data and no graphical display; no window is opened by the
-automated suite.
+The test scripts run a real syntax check, a real build, all five synthetic WAD
+test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding,
+framebuffer/presentation and COLORMAP/PNAMES), and smoke tests against the
+produced executable. They need no game data and no graphical display; no window
+is opened by the automated suite.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -185,6 +191,45 @@ PatchOpaqueAt(*PatchImage, X, Y)           -> 0/1, or -1
 - Malformed offsets, posts, dimensions and truncations are rejected with an
   actionable error; partial output is released. `PatchLastError()` and
   `PaletteLastError()` report the last failure.
+
+## Resource tables (M2-01)
+
+`src/Graphics/Colormap.pbi` decodes lighting/effect translation tables:
+
+```text
+ColormapDecode(*Bytes, Length, *ColormapSet)  -> #True / #False
+ColormapReset(*ColormapSet)
+ColormapCount(*ColormapSet)
+ColormapLookup(*ColormapSet, Map, PaletteIndex) -> 0..255 or -1
+```
+
+- The lump is a sequence of 256-byte tables of palette indices, not RGB.
+  Bytes are copied verbatim; no table is synthesized or modified.
+- Length must be a nonzero multiple of 256; up to 256 tables are accepted.
+- Both map and palette indices are bounds-checked. The known Ultimate Doom
+  `COLORMAP` has 34 tables (8,704 bytes).
+
+`src/Graphics/PNames.pbi` decodes the ordered wall-patch name table:
+
+```text
+PNamesDecode(*Bytes, Length, *PNamesTable)    -> #True / #False
+PNamesReset(*PNamesTable)
+PNamesCount(*PNamesTable)
+PNamesRawNameByte(*PNamesTable, NameIndex, ByteOffset)
+PNamesDisplayName(*PNamesTable, NameIndex)
+```
+
+- A signed 32-bit count is followed by that many eight-byte raw names.
+- Order and duplicates are preserved; bytes are never uppercased or Unicode
+  converted. NUL padding and embedded NUL bytes are kept.
+- Counts above 65,536 and tables whose declared bytes do not fit are rejected.
+  Trailing bytes after the declared names are accepted and ignored.
+- Raw access is limited to offsets 0..7; display strings stop at NUL and
+  sanitize nonprintable bytes.
+
+Both result structures are caller-owned and zero-initialized once; the decoder
+owns a private copy, `Reset` frees it, and a failed decode leaves the result
+empty. Neither decoder reopens a WAD or borrows the caller's input buffer.
 
 ## Framebuffer and presentation
 

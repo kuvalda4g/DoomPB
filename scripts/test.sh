@@ -3,8 +3,8 @@
 # Runs the DoomPB verification suite on Linux/Unix.
 #
 # Performs a real PureBasic syntax check, a real build, the synthetic WAD
-# header/directory, lump lookup/payload, PLAYPAL/patch decoder and
-# framebuffer/presentation unit tests, and smoke tests against the produced
+# header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/presentation
+# and COLORMAP/PNAMES unit tests, and smoke tests against the produced
 # executable: --version, --help, no-argument startup, unknown-option handling,
 # --lump-info argument validation and nonblocking --show-title failures. No
 # commercial game data and no display are needed.
@@ -22,6 +22,7 @@ UNIT_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadTests"
 LUMP_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadLumpTests"
 GRAPHICS_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadGraphicsTests"
 DISPLAY_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadDisplayTests"
+RESOURCE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadResourceTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -268,6 +269,50 @@ if [ "${display_status}" -eq 0 ]; then
     printf 'PASS: synthetic WAD display tests exit with 0\n'
 else
     printf 'FAIL: synthetic WAD display tests exit with %s\n' "${display_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== WAD COLORMAP/PNAMES test build ==\n'
+run_build --check --resource-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD resource test syntax check exits with 0\n'
+else
+    printf 'FAIL: WAD resource test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD resource test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --resource-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD resource test build exits with 0\n'
+else
+    printf 'FAIL: WAD resource test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD resource test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${RESOURCE_TEST_BIN}" ]; then
+    printf 'PASS: WAD resource test output exists: %s\n' "${RESOURCE_TEST_BIN}"
+else
+    printf 'FAIL: WAD resource test output missing: %s\n' "${RESOURCE_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD resource test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== WAD COLORMAP/PNAMES unit tests ==\n'
+"${RESOURCE_TEST_BIN}"
+resource_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${resource_status}" -eq 0 ]; then
+    printf 'PASS: synthetic WAD resource tests exit with 0\n'
+else
+    printf 'FAIL: synthetic WAD resource tests exit with %s\n' "${resource_status}" >&2
     FAILURES=$((FAILURES + 1))
 fi
 
