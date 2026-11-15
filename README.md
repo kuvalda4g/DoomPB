@@ -9,9 +9,9 @@ ticks and WAD compatibility — rather than to reimagine it.
 > The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`
 > and Doom patches, composites them into an indexed software framebuffer and
 > presents `TITLEPIC` in a native 960x600 window at 3x nearest-neighbour.
-> M2-01 adds `COLORMAP` and `PNAMES` resource-table decoders; texture assembly,
-> maps, the world renderer and gameplay are still pending. Linux x64 runtime is
-> **NOT RUN**.
+> M2 adds `COLORMAP`, `PNAMES` and `TEXTURE1`/`TEXTURE2` definition parsing with
+> PNAMES-to-WAD patch resolution; texture pixel composition, maps, the world
+> renderer and gameplay are still pending. Linux x64 runtime is **NOT RUN**.
 
 ## Legal notice
 
@@ -61,6 +61,9 @@ repository.
 # Build the COLORMAP/PNAMES tests -> build/DoomPB-WadResourceTests.exe
 ./scripts/build.ps1 -ResourceTest
 
+# Build the TEXTURE1/TEXTURE2 tests -> build/DoomPB-WadTextureDefsTests.exe
+./scripts/build.ps1 -TextureDefTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -89,17 +92,20 @@ repository.
 # Build the COLORMAP/PNAMES tests -> build/DoomPB-WadResourceTests
 ./scripts/build.sh --resource-test
 
+# Build the TEXTURE1/TEXTURE2 tests -> build/DoomPB-WadTextureDefsTests
+./scripts/build.sh --texture-def-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, all five synthetic WAD
+The test scripts run a real syntax check, a real build, all six synthetic WAD
 test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding,
-framebuffer/presentation and COLORMAP/PNAMES), and smoke tests against the
-produced executable. They need no game data and no graphical display; no window
-is opened by the automated suite.
+framebuffer/presentation, COLORMAP/PNAMES and TEXTURE1/TEXTURE2 definitions),
+and smoke tests against the produced executable. They need no game data and no
+graphical display; no window is opened by the automated suite.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -230,6 +236,48 @@ PNamesDisplayName(*PNamesTable, NameIndex)
 Both result structures are caller-owned and zero-initialized once; the decoder
 owns a private copy, `Reset` frees it, and a failed decode leaves the result
 empty. Neither decoder reopens a WAD or borrows the caller's input buffer.
+
+## Texture definitions (M2-02)
+
+`src/Graphics/TextureDefs.pbi` decodes `TEXTURE1` and optional `TEXTURE2`
+definitions and resolves referenced patch names:
+
+```text
+TextureDefsDecode(*Bytes, Length, *TextureDefs)
+TextureDefsReset(*TextureDefs) / TextureDefsCount / TextureDefsDisplayName
+TextureDefsGetProperties(*Defs, Index, *Width, *Height, *Masked,
+                         *ColumnDir, *PatchCount)
+TextureDefsGetPatch(*Defs, TextureIndex, PatchIndex, *OriginX, *OriginY,
+                    *PNameIndex, *StepDir, *ColorMap)
+
+TextureCatalogDecode(*T1, T1Length, *T2, T2Length, HasT2, *Catalog)
+TextureCatalogReset / Count / GetProperties / GetPatch / DisplayName
+TextureCatalogFindName(*Catalog, Name)
+TextureCatalogResolve(*Catalog, *PNamesTable)
+TextureCatalogInvalidateResolved(*Catalog)
+TextureCatalogGetResolvedPatchLump(*Catalog, TextureIndex, PatchIndex)
+```
+
+- Definitions preserve eight raw name bytes, signed width/height, raw
+  `masked`, obsolete `columndirectory`, patch count and every signed 10-byte
+  placement (origin, PNAMES index, stepdir, colormap). `columndirectory` is
+  never dereferenced.
+- `TEXTURE2` is optional: absent is success, present but malformed is failure.
+  Definitions are concatenated in source order, TEXTURE1 first.
+- Limits: 65,536 definitions per lump, dimensions 1..4096, 1,024 patches per
+  texture and 65,536 patches total. Negative counts, truncated directories,
+  offsets inside the directory, invalid dimensions and truncated placements are
+  rejected.
+- Texture-name lookup is eight-byte ASCII case-insensitive and scans from the
+  first definition, matching `R_CheckTextureNumForName()`.
+- Only referenced PNAMES entries are resolved. Resolution checks each index,
+  builds the canonical patch name, calls `WADFindLump()` (last duplicate lump
+  wins), rejects zero-length patches and stores only a WAD index. It is atomic:
+  a failure clears all resolved indices.
+- Resolved indices are tied to the currently open WAD. After `WADClose()` or
+  `WADOpen()`, call `TextureCatalogInvalidateResolved()` or resolve again.
+- Result structures are caller-owned and zero-initialized once; all metadata is
+  privately copied. `Reset` frees it, is idempotent and is safe after failures.
 
 ## Framebuffer and presentation
 

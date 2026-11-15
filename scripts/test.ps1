@@ -5,10 +5,11 @@
 .DESCRIPTION
     Performs a real PureBasic syntax check, a real build, the synthetic WAD
     header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/
-    presentation and COLORMAP/PNAMES unit tests, and smoke tests against the
-    produced executable: --version, --help, no-argument startup, unknown-option
-    handling, --lump-info argument validation and nonblocking --show-title
-    failures. No commercial game data and no display are needed.
+    presentation, COLORMAP/PNAMES and TEXTURE1/TEXTURE2 definition unit tests,
+    and smoke tests against the produced executable: --version, --help,
+    no-argument startup, unknown-option handling, --lump-info argument
+    validation and nonblocking --show-title failures. No commercial game data
+    and no display are needed.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -34,6 +35,7 @@ $lumpTestExe = Join-Path $repoRoot 'build\DoomPB-WadLumpTests.exe'
 $graphicsTestExe = Join-Path $repoRoot 'build\DoomPB-WadGraphicsTests.exe'
 $displayTestExe = Join-Path $repoRoot 'build\DoomPB-WadDisplayTests.exe'
 $resourceTestExe = Join-Path $repoRoot 'build\DoomPB-WadResourceTests.exe'
+$textureDefTestExe = Join-Path $repoRoot 'build\DoomPB-WadTextureDefsTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -53,11 +55,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -178,6 +180,24 @@ Write-Host '== WAD COLORMAP/PNAMES unit tests =='
 & $resourceTestExe
 $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "synthetic WAD resource tests exit with 0 (got $status)"
+
+Write-Host ''
+Write-Host '== WAD TEXTURE1/TEXTURE2 test build =='
+$status = Invoke-BuildStep -Check -TextureDefTest
+Test-Condition ($status -eq 0) "WAD texture definition test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -TextureDefTest
+Test-Condition ($status -eq 0) "WAD texture definition test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $textureDefTestExe -PathType Leaf) "WAD texture definition test output exists: $textureDefTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $textureDefTestExe -PathType Leaf)) {
+    Write-Host "Aborting: WAD texture definition test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== WAD TEXTURE1/TEXTURE2 unit tests =='
+& $textureDefTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic WAD texture definition tests exit with 0 (got $status)"
 
 Write-Host ''
 Write-Host '== Smoke tests =='

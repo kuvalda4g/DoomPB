@@ -23,10 +23,11 @@ LUMP_TEST_BUILD=0
 GRAPHICS_TEST_BUILD=0
 DISPLAY_TEST_BUILD=0
 RESOURCE_TEST_BUILD=0
+TEXTURE_DEF_TEST_BUILD=0
 
 usage() {
     cat <<'EOF'
-Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-test | --resource-test] [--help]
+Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-test | --resource-test | --texture-def-test] [--help]
 
   (no option)   Syntax-check and build build/DoomPB.
   -k, --check   Run the PureBasic syntax check only.
@@ -39,6 +40,8 @@ Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-te
                 Build the framebuffer/presentation test program instead.
   -r, --resource-test
                 Build the COLORMAP/PNAMES decoder test program instead.
+  -x, --texture-def-test
+                Build the TEXTURE1/TEXTURE2 definition test program instead.
   -h, --help    Show this help and exit.
 
 Compiler discovery: PB_COMPILER, then pbcompiler on PATH, then common
@@ -103,6 +106,9 @@ while [ $# -gt 0 ]; do
         -r|--resource-test)
             RESOURCE_TEST_BUILD=1
             ;;
+        -x|--texture-def-test)
+            TEXTURE_DEF_TEST_BUILD=1
+            ;;
         -h|--help)
             usage
             exit 0
@@ -118,7 +124,7 @@ done
 
 [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 
-selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD + DISPLAY_TEST_BUILD + RESOURCE_TEST_BUILD))
+selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD + DISPLAY_TEST_BUILD + RESOURCE_TEST_BUILD + TEXTURE_DEF_TEST_BUILD))
 if [ "${selected_targets}" -gt 1 ]; then
     fail 'test targets select different programs; choose one.'
 fi
@@ -150,6 +156,12 @@ fi
 if [ "${RESOURCE_TEST_BUILD}" -eq 1 ]; then
     SOURCE_FILE="${REPO_ROOT}/tests/unit/wad_resource_tests.pb"
     OUTPUT_FILE="${BUILD_DIR}/DoomPB-WadResourceTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
+
+if [ "${TEXTURE_DEF_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/unit/wad_texture_defs_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-WadTextureDefsTests"
     [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 fi
 

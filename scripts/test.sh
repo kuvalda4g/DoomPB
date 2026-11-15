@@ -3,11 +3,11 @@
 # Runs the DoomPB verification suite on Linux/Unix.
 #
 # Performs a real PureBasic syntax check, a real build, the synthetic WAD
-# header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/presentation
-# and COLORMAP/PNAMES unit tests, and smoke tests against the produced
-# executable: --version, --help, no-argument startup, unknown-option handling,
-# --lump-info argument validation and nonblocking --show-title failures. No
-# commercial game data and no display are needed.
+# header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/presentation,
+# COLORMAP/PNAMES and TEXTURE1/TEXTURE2 definition unit tests, and smoke tests
+# against the produced executable: --version, --help, no-argument startup,
+# unknown-option handling, --lump-info argument validation and nonblocking
+# --show-title failures. No commercial game data and no display are needed.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -23,6 +23,7 @@ LUMP_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadLumpTests"
 GRAPHICS_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadGraphicsTests"
 DISPLAY_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadDisplayTests"
 RESOURCE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadResourceTests"
+TEXTURE_DEF_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadTextureDefsTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -313,6 +314,50 @@ if [ "${resource_status}" -eq 0 ]; then
     printf 'PASS: synthetic WAD resource tests exit with 0\n'
 else
     printf 'FAIL: synthetic WAD resource tests exit with %s\n' "${resource_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== WAD TEXTURE1/TEXTURE2 test build ==\n'
+run_build --check --texture-def-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD texture definition test syntax check exits with 0\n'
+else
+    printf 'FAIL: WAD texture definition test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD texture definition test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --texture-def-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD texture definition test build exits with 0\n'
+else
+    printf 'FAIL: WAD texture definition test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD texture definition test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${TEXTURE_DEF_TEST_BIN}" ]; then
+    printf 'PASS: WAD texture definition test output exists: %s\n' "${TEXTURE_DEF_TEST_BIN}"
+else
+    printf 'FAIL: WAD texture definition test output missing: %s\n' "${TEXTURE_DEF_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD texture definition test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== WAD TEXTURE1/TEXTURE2 unit tests ==\n'
+"${TEXTURE_DEF_TEST_BIN}"
+texture_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${texture_status}" -eq 0 ]; then
+    printf 'PASS: synthetic WAD texture definition tests exit with 0\n'
+else
+    printf 'FAIL: synthetic WAD texture definition tests exit with %s\n' "${texture_status}" >&2
     FAILURES=$((FAILURES + 1))
 fi
 

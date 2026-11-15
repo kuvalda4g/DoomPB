@@ -17,13 +17,23 @@ is not a `0.2.0` release note.
   (`src/Graphics/PNames.pbi`).
 - Synthetic C01-C13/N01-N15 test suite plus WAD integration I01-I03.
 - `-ResourceTest` / `--resource-test` build target.
+- `TEXTURE1`/`TEXTURE2` definition decoder preserving names, dimensions,
+  flags and ordered patch placements (`src/Graphics/TextureDefs.pbi`).
+- Explicit, atomic PNAMES-to-WAD resolution for referenced patches only, with
+  first-match texture-name lookup and stale-index invalidation.
+- Synthetic D01-D20/R01-R10 test suite plus integration I01-I03.
+- `-TextureDefTest` / `--texture-def-test` build target.
 
 ### Verified
 
-- Windows x64, PureBasic 6.41: complete suite passes with 40/40 script checks.
+- Windows x64, PureBasic 6.41: complete suite passes with 44/44 script checks.
 - New resource tests: 28 synthetic cases plus 3 integration cases.
+- New texture-definition tests: 20 binary cases, 10 resolution cases and
+  3 integration cases (165 assertions).
 - Local Ultimate Doom `COLORMAP`: 8,704 bytes, 34 maps.
 - Local `PNAMES`: 2,812 bytes, 351 names, no trailing bytes.
+- Local textures: `TEXTURE1` 9,234 bytes, `TEXTURE2` 8,036 bytes, 287
+  definitions, 980 placements, all resolved.
 - M1 regressions and `--show-title` remain green.
 - Linux x64 runtime: **NOT RUN**.
 

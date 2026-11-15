@@ -9,7 +9,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
-| M2 - Resources and map loading | in progress | M2-01 `COLORMAP`/`PNAMES` decoders implemented locally, not yet committed; texture assembly and maps pending |
+| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`; M2-02 TEXTURE1/TEXTURE2 decoding and PNAMES resolution implemented locally, not yet committed; composite texture assembly and maps pending |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -418,6 +418,80 @@ Verified behaviour:
   names, `4 + 351*8 = 2,812` and no trailing bytes (FNV-1a64
   `A928B2617C343C48`). No payload tables or name lists are printed.
 - `--show-title` still opens the 960x600 TITLEPIC window and exits 0.
+
+## M2-02 — TEXTURE1/TEXTURE2 definitions and PNAMES resolution
+
+Original C symbols consulted (same pinned revision):
+
+- `mappatch_t` / `maptexture_t` (`r_data.c`): on-disk name, masked, width,
+  height, obsolete columndirectory, patchcount and 10-byte placements.
+- `R_InitTextures`: reads TEXTURE1 first and TEXTURE2 afterwards, preserves
+  definition order and patch order, and resolves each referenced PNAMES entry
+  through `W_CheckNumForName`.
+- `R_CheckTextureNumForName`: case-insensitive `strncasecmp` over eight bytes,
+  scanning from the first definition. This is the opposite precedence from
+  `WADFindLump`, which returns the last matching directory entry.
+
+Port mapping:
+
+- `src/Graphics/TextureDefs.pbi`:
+  - `TextureDefsDecode/Reset/Count/GetNameByte/DisplayName/GetProperties/GetPatch`
+    for one TEXTURE1 or TEXTURE2 lump.
+  - `TextureCatalogDecode/Reset/Count/GetProperties/GetPatch/FindName/Resolve/
+    InvalidateResolved/GetResolvedPatchLump` for TEXTURE1 plus optional TEXTURE2.
+
+Format and validation:
+
+- The 4-byte signed count and 32-bit offsets are read explicitly; definitions
+  are never overlaid with native structures.
+- Every definition preserves eight raw name bytes, raw masked and obsolete
+  columndirectory values, signed width/height, patch count and all five signed
+  16-bit placement fields. The obsolete field is never dereferenced.
+- Directory order is preserved; offsets need not be sorted and may legally
+  overlap or repeat. Patch placements remain back-to-front source order.
+- Limits: 65,536 definitions per lump, width/height 1..4096, 1,024 patches per
+  texture, 65,536 total patches. Negative counts/offsets/dimensions/patch counts,
+  truncated tables or headers, offsets inside the directory table, patch data
+  past EOF and non-positive dimensions are rejected with contextual errors.
+- Empty definition sets (count 0) are valid. `TEXTURE2` is optional; when present
+  it must decode successfully or the whole catalog is cleared.
+
+Resolution:
+
+- Only PNAMES entries actually referenced by a placement are resolved. Unused
+  missing entries do not fail resolution.
+- A negative or out-of-range PNAMES index, an empty/nonprintable/embedded-NUL
+  name, a missing WAD lump or a zero-length patch is an explicit error.
+- Canonical names are passed to the existing `WADFindLump`, so duplicate patch
+  lumps follow last-match precedence. No PNAMES bytes are modified.
+- Resolution is atomic: failure clears every resolved index. A successful call
+  stores WAD directory indices only (no payload pointers).
+- Resolved indices belong to the current WAD session. `WADClose()`/`WADOpen()`
+  invalidates them logically; callers use `TextureCatalogInvalidateResolved()`
+  or resolve again.
+- Texture-name lookup is first-match and ASCII case-insensitive across
+  TEXTURE1 then TEXTURE2, matching `R_CheckTextureNumForName`. The `"-"`
+  no-texture sentinel is not interpreted by this API.
+
+Intentional differences from the original:
+
+- The original trusts offsets, counts and dimensions; DoomPB validates all of
+  them and caps resource usage.
+- PNAMES resolution is explicit and atomic instead of deferred fatal errors in
+  the renderer path.
+- No texture composition, column lookup generation, caching or rendering is
+  performed in this module.
+
+Verified behaviour:
+
+- `tests/unit/wad_texture_defs_tests.pb` covers D01–D20 (20 synthetic binary
+  cases), R01–R10 (10 resolution cases) and I01–I03 (3 synthetic WAD
+  integration cases).
+- Local Ultimate Doom 1.9ud: `TEXTURE1` 9,234 bytes and `TEXTURE2` 8,036 bytes
+  are both present; 287 definitions total, 980 patch placements, all 980
+  resolved; first texture is 24x72 with 2 patches; metadata FNV-1a64
+  `FF132795FFDEA1DB`.
+- The M1 suites, `--show-title` and the `0.1.0` version remain unchanged.
 
 ## Compatibility conventions adopted so far
 
