@@ -9,10 +9,10 @@ ticks and WAD compatibility — rather than to reimagine it.
 > The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`
 > and Doom patches, composites titles and wall textures, and presents `TITLEPIC`
 > in a native 960x600 window at 3x nearest-neighbour. M2 adds `COLORMAP`,
-> `PNAMES`, `TEXTURE1`/`TEXTURE2`, composite wall textures, `F_START`/`F_END`
-> flat namespaces with 64x64 decoding, and `S_START`/`S_END` sprite catalogs
-> with strict frame/rotation assembly. Maps, the world renderer and gameplay are
-> still pending. Linux x64 runtime is **NOT RUN**.
+> `PNAMES`, `TEXTURE1`/`TEXTURE2`, composite wall textures, flat/sprite
+> namespaces and bounds-checked decoders for all ten vanilla map lumps. Map
+> loading/cross-validation, the world renderer and gameplay are still pending.
+> Linux x64 runtime is **NOT RUN**.
 
 ## Legal notice
 
@@ -71,6 +71,9 @@ repository.
 # Build the flat/sprite tests -> build/DoomPB-WadFlatSpriteTests.exe
 ./scripts/build.ps1 -FlatSpriteTest
 
+# Build the vanilla map binary tests -> build/DoomPB-WadMapTypesTests.exe
+./scripts/build.ps1 -MapTypesTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -108,18 +111,21 @@ repository.
 # Build the flat/sprite tests -> build/DoomPB-WadFlatSpriteTests
 ./scripts/build.sh --flat-sprite-test
 
+# Build the vanilla map binary tests -> build/DoomPB-WadMapTypesTests
+./scripts/build.sh --map-types-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, all eight synthetic WAD
+The test scripts run a real syntax check, a real build, all nine synthetic WAD
 test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding,
 framebuffer/presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definitions,
-composite wall textures and flat/sprite namespaces), and smoke tests against the
-produced executable. They need no game data and no graphical display; no window
-is opened by the automated suite.
+composite wall textures, flat/sprite namespaces and vanilla map binaries), and
+smoke tests against the produced executable. They need no game data and no
+graphical display; no window is opened by the automated suite.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -381,6 +387,48 @@ SpriteFrameSetReset / SpriteLastError
 - Frame sets store absolute WAD indices and flip flags, not payload pointers.
   Catalog indices are tied to the current WAD and require an explicit rebuild
   after `WADClose()`/`WADOpen()`.
+
+## Vanilla map binary decoders (M2-05)
+
+`src/Map/MapTypes.pbi` defines exact-sized native records (not packed overlays),
+magnitudes and constants (`NF_SUBSECTOR`, `ML_*`). `src/Map/MapDecode.pbi`
+decodes the eight fixed-record lumps plus REJECT; `src/Map/Blockmap.pbi` handles
+BLOCKMAP.
+
+```text
+MapThingsDecode/Reset/Count/Get
+MapLinedefsDecode/Reset/Count/Get
+MapSidedefsDecode/Reset/Count/Get/NameByte/DisplayName
+MapVertexesDecode/Reset/Count/Get
+MapSegsDecode/Reset/Count/Get
+MapSubsectorsDecode/Reset/Count/Get
+MapNodesDecode/Reset/Count/Get/ChildIsSubsector/ChildIndex
+MapSectorsDecode/Reset/Count/Get/NameByte/DisplayName
+MapRejectDecode/Reset/Size/RawByte/GetBit
+MapBlockmapDecode/Reset/Header/GetCell/GetLine
+```
+
+- Record strides: THINGS 10, LINEDEFS 14, SIDEDEFS 30, VERTEXES 4, SEGS 12,
+  SSECTORS 4, NODES 28, SECTORS 26. Lengths must be exact multiples; partial
+  trailing bytes are rejected. Zero-length tables are valid empties.
+- Signed fields are sign-extended, unsigned fields (flags, vertex/sector words,
+  seg angle, node children, subsector counts) keep all 16 bits. LINEDEF
+  `sidenum[1] = -1` stays signed. All three SIDEDEF names and both SECTOR pic
+  names keep raw eight-byte arrays.
+- NODES preserve raw children and bbox order top/bottom/left/right. Helpers
+  expose `NF_SUBSECTOR` and the masked child index without graph traversal.
+- `REJECT` keeps an owned raw copy. `MapRejectGetBit` takes the sector count
+  explicitly, validates indices and returns LSB-first matrix bits.
+- `BLOCKMAP` uses unsigned 16-bit **word** offsets. Decode validates the header,
+  every referenced list (zero dummy, 0xFFFF terminator), bounds and a work
+  budget. Cells may share or reorder list offsets; trailing unreferenced words
+  are allowed.
+- Cross-lump reference validation (vertex/sector indices, BSP child ranges,
+  REJECT size vs sectors, BLOCKMAP line ranges) is deferred to M2-06.
+- Result objects are caller-owned and zero-initialized once; decode owns private
+  copies, Reset is idempotent, and failures clear previous output.
+- Caps: 65,536 records/type, 1,048,576 blockmap cells and 16,000,000 scanned
+  list words. These are project safety limits, not Doom format limits.
 
 ## Framebuffer and presentation
 

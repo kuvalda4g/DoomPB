@@ -6,10 +6,11 @@
     Performs a real PureBasic syntax check, a real build, the synthetic WAD
     header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/
     presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definition, composite
-    wall-texture and flat/sprite namespace unit tests, and smoke tests against
-    the produced executable: --version, --help, no-argument startup,
-    unknown-option handling, --lump-info argument validation and nonblocking
-    --show-title failures. No commercial game data and no display are needed.
+    wall-texture, flat/sprite namespace and vanilla map binary unit tests, and
+    smoke tests against the produced executable: --version, --help, no-argument
+    startup, unknown-option handling, --lump-info argument validation and
+    nonblocking --show-title failures. No commercial game data and no display
+    are needed.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -38,6 +39,7 @@ $resourceTestExe = Join-Path $repoRoot 'build\DoomPB-WadResourceTests.exe'
 $textureDefTestExe = Join-Path $repoRoot 'build\DoomPB-WadTextureDefsTests.exe'
 $compositeTestExe = Join-Path $repoRoot 'build\DoomPB-WadCompositeTests.exe'
 $flatSpriteTestExe = Join-Path $repoRoot 'build\DoomPB-WadFlatSpriteTests.exe'
+$mapTypesTestExe = Join-Path $repoRoot 'build\DoomPB-WadMapTypesTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -57,11 +59,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -236,6 +238,24 @@ Write-Host '== WAD flat/sprite unit tests =='
 & $flatSpriteTestExe
 $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "synthetic WAD flat/sprite tests exit with 0 (got $status)"
+
+Write-Host ''
+Write-Host '== WAD map binary test build =='
+$status = Invoke-BuildStep -Check -MapTypesTest
+Test-Condition ($status -eq 0) "WAD map types test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -MapTypesTest
+Test-Condition ($status -eq 0) "WAD map types test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $mapTypesTestExe -PathType Leaf) "WAD map types test output exists: $mapTypesTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $mapTypesTestExe -PathType Leaf)) {
+    Write-Host "Aborting: WAD map types test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== WAD map binary unit tests =='
+& $mapTypesTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic WAD map binary tests exit with 0 (got $status)"
 
 Write-Host ''
 Write-Host '== Smoke tests =='

@@ -34,16 +34,23 @@ is not a `0.2.0` release note.
   metadata and strict frame/rotation/flip assembly (`src/Graphics/Sprite.pbi`).
 - Synthetic F01-F16/S01-S20 test suite, I01-I03 integration and
   `-FlatSpriteTest` / `--flat-sprite-test` build target.
+- Bounds-checked decoders for THINGS, LINEDEFS, SIDEDEFS, VERTEXES, SEGS,
+  SSECTORS, NODES, SECTORS, REJECT and BLOCKMAP, with native record types
+  (`src/Map/MapTypes.pbi`, `MapDecode.pbi`, `Blockmap.pbi`).
+- Synthetic M01-M48 map tests plus I01-I03 and `-MapTypesTest` /
+  `--map-types-test` build target.
 
 ### Verified
 
-- Windows x64, PureBasic 6.41: complete suite passes with 52/52 script checks.
+- Windows x64, PureBasic 6.41: complete suite passes with 56/56 script checks.
 - New resource tests: 28 synthetic cases plus 3 integration cases.
 - New texture-definition tests: 20 binary cases, 10 resolution cases and
   3 integration cases (165 assertions).
 - New composite tests: 30 cases, 141 assertions.
 - New flat/sprite tests: 16 flat cases, 20 sprite cases and 3 integration
   cases (300 assertions).
+- New map binary tests: 48 format cases plus 3 integration cases (190
+  assertions).
 - Local Ultimate Doom `COLORMAP`: 8,704 bytes, 34 maps.
 - Local `PNAMES`: 2,812 bytes, 351 names, no trailing bytes.
 - Local textures: `TEXTURE1` 9,234 bytes, `TEXTURE2` 8,036 bytes, 287
@@ -53,6 +60,8 @@ is not a `0.2.0` release note.
 - Local flats: 111 interior entries (107 valid 4096-byte flats).
 - Local sprites: 764 interior entries; 40/40 sampled frame sets built and one
   sprite decoded through `PatchDecode`.
+- Local maps E1M1/E1M2/E4M1: all ten lumps decode in order; strict BLOCKMAP
+  validation passes; REJECT sizes match the sector-count minimum.
 - M1 regressions and `--show-title` remain green.
 - Linux x64 runtime: **NOT RUN**.
 

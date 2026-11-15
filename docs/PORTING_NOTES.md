@@ -9,7 +9,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
-| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`; M2-04 flats/sprites implemented locally, not yet committed; maps and renderer pending |
+| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`; M2-05 map binary decoders implemented locally, not yet committed; map loading/cross-validation and renderer pending |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -643,6 +643,83 @@ Verified behaviour:
   headers were valid; 40/40 sampled IDs built strict frame sets; one decoded
   sprite measured 114x83 with 9,462 pixels.
 - `--show-title` and the `0.1.0` CLI remain unchanged.
+
+## M2-05 — vanilla map binary structures
+
+Original C symbols consulted (same pinned revision):
+
+- `doomdata.h`: `ML_*`, `mapvertex_t`, `mapthing_t`, `maplinedef_t`,
+  `mapsidedef_t`, `mapseg_t`, `mapsubsector_t`, `mapnode_t`, `mapsector_t`,
+  `NF_SUBSECTOR`.
+- `p_setup.c`: `P_LoadThings`, `P_LoadLineDefs`, `P_LoadSideDefs`,
+  `P_LoadVertexes`, `P_LoadSegs`, `P_LoadSubsectors`, `P_LoadNodes`,
+  `P_LoadSectors`, `P_LoadBlockMap`, `P_SetupLevel` REJECT assignment.
+- `p_maputl.c` / `p_sight.c` used only to confirm BLOCKMAP/REJECT meaning.
+
+Port mapping:
+
+- `src/Map/MapTypes.pbi`: native record structures and format constants.
+  Native layouts are intentionally not packed on-disk copies.
+- `src/Map/MapDecode.pbi`: THINGS/LINEDEFS/SIDEDEFS/VERTEXES/SEGS/SSECTORS/
+  NODES/SECTORS decoders plus REJECT.
+- `src/Map/Blockmap.pbi`: BLOCKMAP header, unsigned word offsets and checked
+  blocklist accessors.
+
+Fixed-record semantics:
+
+- Exact disk strides: 10, 14, 30, 4, 12, 4, 28, 26 bytes. A payload must be a
+  nonnegative exact multiple; partial trailing bytes are rejected. Empty tables
+  (length 0) are valid and getters reject indexes.
+- 16-bit fields are decoded explicitly. Signed fields are sign-extended;
+  LINEDEF flags, vertex/sector/seg indexes, SEGS.angle, SSECTORS counts, and NODE
+  children remain unsigned. LINEDEF `sidenum[1] = -1` remains signed.
+- SIDEDEF top/bottom/middle names and SECTOR floor/ceiling pics are independent
+  raw eight-byte arrays. No NUL assumption, uppercasing or text resolution.
+- NODE bboxes keep top/bottom/left/right order. Raw children are preserved;
+  helpers expose `NF_SUBSECTOR` and `raw & 0x7FFF`. `0x8000` is subsector 0 and
+  `0xFFFF` is flagged subsector 32767. No BSP traversal occurs here.
+- Records are stored as native arrays; results are independent of the input
+  buffer and WAD lifetime. Caps: 65,536 records per type.
+- Cross-lump references (vertex/side/sector ranges, BSP child ranges, blockmap
+  line numbers, REJECT size vs sector count) are deliberately deferred to M2-06.
+
+REJECT:
+
+- Raw bytes are copied into owned storage; an empty lump is valid.
+- `MapRejectGetBit` takes the sector count explicitly, requires 0 < N <= 65536,
+  validates both sector indexes and reads bit `from*N + to`, LSB-first.
+- Missing/truncated matrix bytes are explicit errors; a clear 0 bit is distinct
+  from a failed lookup.
+
+BLOCKMAP:
+
+- Header is originX/originY signed 16-bit and width/height unsigned 16-bit.
+  Offsets are **word offsets** from the lump start, never sign-extended.
+- Decode validates: even length, header size, positive dimensions, cell cap
+  (1,048,576), offset table bounds, every referenced list starting at/after the
+  table, a zero dummy word, a 0xFFFF terminator within the lump, and a 16,000,000
+  word scan budget. Shared/out-of-order offsets are allowed; trailing
+  unreferenced whole words are ignored.
+- The original `P_LoadBlockMap` merely byte-swaps and trusts the data. DoomPB is
+  deliberately stricter for malformed offsets/lists.
+- No line-index validation against LINEDEFS is performed here.
+
+Verified behaviour:
+
+- `tests/unit/wad_map_types_tests.pb` covers M01–M48 plus I01–I03: 51 cases,
+  190 assertions.
+- Local Ultimate Doom maps decode read-only (lump order verified by index):
+  - E1M1 (marker 7): THINGS 1430/143, LINEDEFS 6804/486, SIDEDEFS 19980/666,
+    VERTEXES 1880/470, SEGS 8964/747, SSECTORS 956/239, NODES 6664/238,
+    SECTORS 2288/88, REJECT 968 bytes (minimum 968), BLOCKMAP 36x23/828 cells.
+  - E1M2 (marker 18): THINGS 262, LINEDEFS 1033, SIDEDEFS 1323, VERTEXES 942,
+    SEGS 1463, SSECTORS 448, NODES 447, SECTORS 200, REJECT 5000 (minimum 5000),
+    BLOCKMAP 42x31/1302 cells.
+  - E4M1 (marker 304): THINGS 141, LINEDEFS 471, SIDEDEFS 642, VERTEXES 439,
+    SEGS 695, SSECTORS 196, NODES 195, SECTORS 81, REJECT 821 (minimum 821),
+    BLOCKMAP 18x9/162 cells.
+- All three real BLOCKMAPs pass the strict list validation.
+- The application remains version 0.1.0; TITLEPIC and CLI are unchanged.
 
 ## Compatibility conventions adopted so far
 
