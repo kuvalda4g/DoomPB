@@ -4,11 +4,11 @@
 #
 # Performs a real PureBasic syntax check, a real build, the synthetic WAD
 # header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/presentation,
-# COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definition and composite wall-texture unit
-# tests, and smoke tests against the produced executable: --version, --help,
-# no-argument startup, unknown-option handling, --lump-info argument validation
-# and nonblocking --show-title failures. No commercial game data and no display
-# are needed.
+# COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definition, composite wall-texture and
+# flat/sprite namespace unit tests, and smoke tests against the produced
+# executable: --version, --help, no-argument startup, unknown-option handling,
+# --lump-info argument validation and nonblocking --show-title failures. No
+# commercial game data and no display are needed.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -26,6 +26,7 @@ DISPLAY_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadDisplayTests"
 RESOURCE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadResourceTests"
 TEXTURE_DEF_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadTextureDefsTests"
 COMPOSITE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadCompositeTests"
+FLAT_SPRITE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadFlatSpriteTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -404,6 +405,50 @@ if [ "${composite_status}" -eq 0 ]; then
     printf 'PASS: synthetic WAD composite tests exit with 0\n'
 else
     printf 'FAIL: synthetic WAD composite tests exit with %s\n' "${composite_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== WAD flat/sprite namespace test build ==\n'
+run_build --check --flat-sprite-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD flat/sprite test syntax check exits with 0\n'
+else
+    printf 'FAIL: WAD flat/sprite test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD flat/sprite test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --flat-sprite-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD flat/sprite test build exits with 0\n'
+else
+    printf 'FAIL: WAD flat/sprite test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD flat/sprite test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${FLAT_SPRITE_TEST_BIN}" ]; then
+    printf 'PASS: WAD flat/sprite test output exists: %s\n' "${FLAT_SPRITE_TEST_BIN}"
+else
+    printf 'FAIL: WAD flat/sprite test output missing: %s\n' "${FLAT_SPRITE_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD flat/sprite test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== WAD flat/sprite unit tests ==\n'
+"${FLAT_SPRITE_TEST_BIN}"
+flat_sprite_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${flat_sprite_status}" -eq 0 ]; then
+    printf 'PASS: synthetic WAD flat/sprite tests exit with 0\n'
+else
+    printf 'FAIL: synthetic WAD flat/sprite tests exit with %s\n' "${flat_sprite_status}" >&2
     FAILURES=$((FAILURES + 1))
 fi
 

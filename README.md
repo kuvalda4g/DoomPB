@@ -7,12 +7,12 @@ ticks and WAD compatibility — rather than to reimagine it.
 
 > **Status: `0.1.0` — milestone M1 complete on Windows x64; M2 in progress.**
 > The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`
-> and Doom patches, composites them into an indexed software framebuffer and
-> presents `TITLEPIC` in a native 960x600 window at 3x nearest-neighbour.
-> M2 adds `COLORMAP`, `PNAMES`, `TEXTURE1`/`TEXTURE2` definitions, PNAMES-to-WAD
-> resolution and composite wall-texture assembly into indexed pixels plus a
-> mask. Maps, the world renderer and gameplay are still pending. Linux x64
-> runtime is **NOT RUN**.
+> and Doom patches, composites titles and wall textures, and presents `TITLEPIC`
+> in a native 960x600 window at 3x nearest-neighbour. M2 adds `COLORMAP`,
+> `PNAMES`, `TEXTURE1`/`TEXTURE2`, composite wall textures, `F_START`/`F_END`
+> flat namespaces with 64x64 decoding, and `S_START`/`S_END` sprite catalogs
+> with strict frame/rotation assembly. Maps, the world renderer and gameplay are
+> still pending. Linux x64 runtime is **NOT RUN**.
 
 ## Legal notice
 
@@ -68,6 +68,9 @@ repository.
 # Build the composite texture tests -> build/DoomPB-WadCompositeTests.exe
 ./scripts/build.ps1 -CompositeTest
 
+# Build the flat/sprite tests -> build/DoomPB-WadFlatSpriteTests.exe
+./scripts/build.ps1 -FlatSpriteTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -102,18 +105,21 @@ repository.
 # Build the composite texture tests -> build/DoomPB-WadCompositeTests
 ./scripts/build.sh --composite-test
 
+# Build the flat/sprite tests -> build/DoomPB-WadFlatSpriteTests
+./scripts/build.sh --flat-sprite-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, all seven synthetic WAD
+The test scripts run a real syntax check, a real build, all eight synthetic WAD
 test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding,
-framebuffer/presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definitions and
-composite wall textures), and smoke tests against the produced executable. They
-need no game data and no graphical display; no window is opened by the automated
-suite.
+framebuffer/presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definitions,
+composite wall textures and flat/sprite namespaces), and smoke tests against the
+produced executable. They need no game data and no graphical display; no window
+is opened by the automated suite.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -319,6 +325,62 @@ TextureLastError()
 - This is a logical row-major composition. It does not port the original
   column-cache representation or `R_GetColumn`; M3/M4 may add renderer-specific
   column access separately.
+
+## Flats and sprites (M2-04)
+
+`src/Graphics/Flat.pbi` discovers the vanilla flat namespace and decodes
+64x64 indexed flats:
+
+```text
+FlatCatalogBuild / Reset / Count / GetEntry / NameByte / DisplayName / FindName
+FlatDecode(*Bytes, Length, *FlatImage)
+FlatLoad(*Catalog, RelativeIndex, *FlatImage)
+FlatImageGetPixel(*FlatImage, X, Y)
+FlatImageReset / FlatLastError
+```
+
+- `F_START`/`F_END` are found with the existing last-match WAD lookup and
+  excluded from the catalog. The interior range is preserved in directory
+  order; nested zero-length markers inside the range remain visible as metadata,
+  matching vanilla's inclusive index space.
+- A flat payload must be exactly 4,096 bytes. It is copied into owned storage,
+  row-major 64x64, with no header, mask, RGB conversion or scaling. Index 255 is
+  valid.
+- Flat name lookup is namespace-constrained and the last matching flat in the
+  range wins. Vanilla `R_FlatNumForName` uses a global WAD lookup minus
+  `firstflat`; the two differ only for unusual cross-namespace name collisions.
+- Empty ranges are valid (count 0). Missing or reversed markers fail clearly.
+  Wrong-size interior entries are rejected at decode.
+
+`src/Graphics/Sprite.pbi` discovers the vanilla sprite namespace and assembles
+strict frame/rotation tables:
+
+```text
+SpriteCatalogBuild / Reset / Count / GetEntry / NameByte / DisplayName
+SpriteCatalogGetPatchInfo(*Catalog, Index, *Width, *Height, *Left, *Top)
+SpriteBuildFrames(*Catalog, SpriteID, *FrameSet)
+SpriteFrameGet(*FrameSet, FrameIndex, Rotation1To8, *WadIndex, *Flip)
+SpriteFrameSetReset / SpriteLastError
+```
+
+- `S_START`/`S_END` markers are excluded; every interior lump retains its raw
+  eight-byte name, absolute WAD directory index and size in physical order.
+  Catalog lookup never re-resolves names through `WADFindLump`, so duplicate
+  names elsewhere cannot redirect an entry.
+- Names follow vanilla `R_InstallSpriteLump`: bytes 0..3 are the sprite ID,
+  byte 4 is frame `A`..`A`+28 (0..28), byte 5 is rotation `0`..`8`; a nonzero
+  byte 6 starts a second frame/rotation pair in bytes 6/7 using the same lump
+  with horizontal flip.
+- Rotation 0 fills all eight views and conflicts with explicit rotations.
+  Explicit rotations require all eight slots. Duplicate slots, mixed rot=0,
+  incomplete rotations and missing intermediate frames fail strict frame
+  assembly for the requested ID, without invalidating the catalog.
+- Patch header metadata (`width`, `height`, signed `leftoffset`/`topoffset`) is
+  read only after a size check; full post decoding remains the job of the
+  existing `PatchDecode`.
+- Frame sets store absolute WAD indices and flip flags, not payload pointers.
+  Catalog indices are tied to the current WAD and require an explicit rebuild
+  after `WADClose()`/`WADOpen()`.
 
 ## Framebuffer and presentation
 

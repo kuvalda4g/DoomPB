@@ -9,7 +9,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
-| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`, M2-02 as `96c793a`; M2-03 composite wall textures implemented locally, not yet committed; maps and renderer pending |
+| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`; M2-04 flats/sprites implemented locally, not yet committed; maps and renderer pending |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -563,6 +563,86 @@ Verified behaviour:
 - The test suite asserts hand-computed exact pixel layouts for single, clipped,
   overlapping, sparse and offset cases, providing an independent expected
   reference rather than relying only on self-derived hashes.
+
+## M2-04 — flat and sprite namespaces, sprite frame metadata
+
+Original C symbols consulted (same pinned revision):
+
+- `R_InitFlats` / `R_FlatNumForName` (`r_data.c`): `firstflat = F_START + 1`,
+  `lastflat = F_END - 1`, inclusive index range, markers excluded.
+- `R_InitSpriteLumps` (`r_data.c`): `S_START + 1 .. S_END - 1`; patch width and
+  signed offsets are read for metadata.
+- `R_InstallSpriteLump` / `R_InitSpriteDefs` (`r_things.c`): frame bytes
+  `'A'..'A'+28`, rotations `0..8`, `rot=0` versus explicit-rotation conflicts,
+  duplicate-slot rejection, paired frame/rotation with horizontal flip, and
+  contiguous-frame/complete-rotation validation.
+- `spriteframe_t` / `spritedef_t` (`r_defs.h`).
+
+Port mapping:
+
+- `src/Graphics/Flat.pbi`: `FlatCatalog`, `FlatCatalogBuild/Reset/Count/
+  GetEntry/NameByte/DisplayName/FindName`, `FlatDecode`, `FlatLoad`,
+  `FlatImage`, `FlatImageReset/GetPixel`, `FlatLastError`.
+- `src/Graphics/Sprite.pbi`: `SpriteCatalog`, `SpriteCatalogBuild/Reset/Count/
+  GetEntry/NameByte/DisplayName/GetPatchInfo`, `SpriteBuildFrames`,
+  `SpriteFrameSet`, `SpriteFrameGet/Reset`, `SpriteLastError`.
+
+Flat semantics:
+
+- Markers are found with `WADFindLump` (last duplicate marker wins) and excluded
+  from the catalog; interior entries retain physical directory order and
+  absolute WAD indices.
+- Nested zero-length markers inside the outer range (for example `F1_START` /
+  `F1_END` in Ultimate Doom) remain catalog metadata, matching vanilla's
+  inclusive flat index space. Only outer `F_START`/`F_END` delimit the range.
+- A flat must be exactly 4,096 bytes. Decoding copies the payload into private
+  64x64 row-major storage. Palette index 255 is valid.
+- Empty ranges are valid. Missing or reversed markers fail discovery. Wrong-size
+  interior entries stay inspectable and fail at decode.
+- Catalog lookup is namespace-constrained and returns the last matching flat in
+  the range. Vanilla `R_FlatNumForName` performs a global WAD lookup and
+  subtracts `firstflat`; this differs only for unusual cross-namespace name
+  collisions.
+
+Sprite semantics:
+
+- Markers are excluded and all interior lumps keep raw eight-byte names,
+  absolute WAD directory indices and sizes. No name re-resolution occurs, so a
+  duplicate name elsewhere cannot redirect a catalog entry.
+- Frame byte range is 0..28 (`'A'..'A'+28`); rotation is 0..8 (byte `'0'..'8'`).
+  Noncanonical names are exposed as metadata but fail strict assembly only when
+  their four-byte ID is requested.
+- Rotation 0 fills all eight views and conflicts with explicit rotations.
+  Explicit rotations require all eight slots; duplicate slots are rejected.
+- A nonzero byte 6 requests a secondary frame/rotation pair in bytes 6/7 using
+  the same WAD lump with flip=1. A nonzero byte 7 with zero byte 6 is an
+  incomplete pair and is rejected.
+- Frames from 0 through the highest frame must be contiguous. Missing frames or
+  rotations fail only the requested frame set; the catalog remains usable.
+- Frame sets own absolute WAD indices/flip bytes and never point into WAD data.
+  Rebuild catalogs and frame sets after `WADClose()`/`WADOpen()`.
+
+Intentional differences from the original:
+
+- The original calls `I_Error` for incomplete groups; DoomPB returns structured
+  errors and leaves the catalog intact.
+- The original stores sprite lump offsets relative to `firstspritelump`; DoomPB
+  stores absolute WAD directory indices.
+- Multi-WAD `modifiedgame` patching is out of scope; only the single open WAD is
+  consulted.
+- `F_SKY1` remains ordinary flat metadata; sky semantics belong to the renderer.
+
+Verified behaviour:
+
+- `tests/unit/wad_flat_sprite_tests.pb` covers F01–F16, S01–S20 and I01–I03:
+  39 cases, 300 assertions.
+- Local Ultimate Doom: `F_START`=2193, `F_END`=2305, 111 interior entries
+  (107 valid 4096-byte flats plus nested zero-length markers). Sample decoded
+  flat checksums: `914C601BD4AD6095`, `FFCB6128B1528C61`, `2AB2327A75132B68`.
+- `S_START`=1068, `S_END`=1833, 764 interior sprite entries. Twenty inspected
+  headers were valid; 40/40 sampled IDs built strict frame sets; one decoded
+  sprite measured 114x83 with 9,462 pixels.
+- `--show-title` and the `0.1.0` CLI remain unchanged.
 
 ## Compatibility conventions adopted so far
 
