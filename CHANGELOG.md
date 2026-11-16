@@ -3,10 +3,10 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-16
 
-Milestone M2 in progress. The application version remains `0.1.0`; this section
-is not a `0.2.0` release note.
+Milestone M2 is complete for the Windows x64 single-IWAD goal. The application
+reports `0.2.0`; no Git tag exists until the owner creates it.
 
 ### Added
 
@@ -49,10 +49,22 @@ is not a `0.2.0` release note.
 - Optional flat/texture catalog binding and `--map-info <ExMy>` diagnostics.
 - Synthetic L01-L52 map loader tests plus I01-I03 and `-MapLoaderTest` /
   `--map-loader-test` build target.
+- Map/field-aware diagnostics for missing or malformed flat and wall-texture
+  names (`E1M1 sector N floor flat ...`, `sidedef N upper texture ...`).
+- M2 end-to-end integration suite (`tests/integration/m2_release_tests.pb`)
+  with 32 synthetic scenarios (E01-E32), three lifecycle integration cases
+  (I01-I03), optional real-IWAD I04, explicit reopen/invalidation checks and
+  canonical FNV-1a64 metadata checksums.
+- `-IntegrationTest` / `--integration-test` build target.
 
 ### Verified
 
-- Windows x64, PureBasic 6.41: complete suite passes with 60/60 script checks.
+- Windows x64, PureBasic 6.41: complete suite passes with 64/64 script checks.
+- New M2 integration tests: 32 synthetic scenarios plus 3 lifecycle cases
+  (35 cases, 221 assertions); optional I04 adds 1 case and 19 assertions.
+- Real Ultimate Doom 1.9ud read-only integration: 287/287 wall textures
+  composed (3,595,870 opaque pixels), 111 flats, 764 sprite entries,
+  `MapLevelValidateResources` passed for E1M1, E1M2 and E4M1.
 - New map loader tests: 52 format/validation cases plus 3 integration cases
   (167 assertions).
 - Local Ultimate Doom maps load and validate read-only: E1M1, E1M2 and E4M1

@@ -9,7 +9,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
-| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`, M2-05 as `2fb2481`; M2-06 map loader/cross-validation implemented locally, not yet committed; renderer pending |
+| M2 - Resources and map loading | complete on Windows x64; `v0.2.0` prepared | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`, M2-05 as `2fb2481`, M2-06 as `2f170c1`; M2-07 integration/version changes are in the working tree pending owner commit/tag; renderer pending; Linux x64 NOT RUN |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -805,7 +805,76 @@ Verified behaviour:
   - E4M1 (marker 304): 141/471/642/439/695/196/195/81; REJECT 821/821;
     BLOCKMAP 18x9, 162 cells; root node 194; full reachability.
 - `scripts/test.ps1`: 60/60 checks pass on Windows x64 with PureBasic 6.41.
-- Application version remains 0.1.0; Linux x64 is NOT RUN.
+- At M2-06 acceptance the application version remained 0.1.0; Linux x64 is
+  NOT RUN.
+
+## M2-07 — integration, acceptance and v0.2.0 preparation
+
+Original C symbols consulted (same pinned revision):
+
+- `r_data.c`: `R_InitTextures`, `R_InitFlats`, `R_InitColormaps`,
+  `R_GenerateComposite` (composite composition and namespace rules).
+- `r_things.c`: sprite naming/frame conventions used only to validate metadata.
+- `p_setup.c`: `P_SetupLevel`, `P_GroupLines` (already ported; re-checked for
+  resource binding and sector membership semantics).
+- `doomdata.h`: eight-byte names and map record layouts.
+
+Integration model:
+
+- `tests/integration/m2_release_tests.pb` uses only existing public APIs:
+  `WADOpen`/lookup/read, `PNamesDecode`, `TextureCatalogDecode`/`Resolve`/
+  `InvalidateResolved`, `TextureCompose`, `FlatCatalogBuild`/`FlatLoad`,
+  `SpriteCatalogBuild`/`BuildFrames`, `MapLevelLoad`, `MapLevelValidateResources`
+  and the M2-06 accessors. No second parser or duplicated decoder exists.
+- Resource binding is a distinct post-load step. The validator now reports the
+  map name, sector/sidedef index and field (`floor`/`ceiling`, `upper`/`lower`/
+  `middle`), and rejects the `-`/empty sentinels only when they are canonical
+  (NUL/space padding). Embedded NUL followed by printable text is an error.
+- A `MapLevel` records its canonical name for diagnostics and keeps owning all
+  decoded records and derived indices; it does not retain WAD or catalog
+  pointers.
+- Catalog resolution remains explicit and caller-controlled. After `WADClose`
+  or a reopen, a composed image and a loaded level stay valid, but
+  `TextureCompose` requires an open WAD and any old resolved WAD indices must be
+  invalidated with `TextureCatalogInvalidateResolved` before `Resolve` is run
+  again. This is documented caller responsibility, not automatic detection.
+- Canonical metadata checksums are FNV-1a64 over explicit little-endian fields
+  (counts, REJECT/BLOCKMAP sizes, BSP root/reachability, selected links and
+  sector membership). Pointers, native structure bytes and padding never enter
+  the hash.
+
+Verified behaviour (Windows x64, PureBasic 6.41):
+
+- `tests/integration/m2_release_tests.pb` without a WAD argument: 35 cases,
+  221 assertions, 0 failures (E01-E32, I01-I03).
+- With the local Ultimate Doom 1.9ud IWAD (read-only): 36 cases, 240
+  assertions, 0 failures.
+- Real resources: 287/287 wall textures composed, 3,595,870 opaque pixels; 111
+  interior flats; 764 sprite entries; sample `TROO` frame metadata and a patch
+  decode pass.
+- `MapLevelValidateResources` with both catalogs:
+  - E1M1: 176 flat references, 22 distinct; 633 wall references, 34 distinct.
+  - E1M2: 400 flat references, 28 distinct; 1,341 wall references, 59 distinct.
+  - E4M1: 162 flat references, 13 distinct; 538 wall references, 17 distinct.
+- Stable metadata hashes: E1M1 `8FE25C30E64E2F6A`, E1M2 `631D1179C1497612`,
+  E4M1 `3798753D4323FB3D`. Synthetic E1M1 two-load hash:
+  `8132798E3BE20DD4`.
+- Full `scripts/test.ps1`: 64/64 checks; all M1/M2 regression suites green
+  (96/694, 31/191, 33/165, 30/141, 39/300, 51/190, 55/167, 35/221 plus I04).
+- `--version` prints `DoomPB 0.2.0`; `--help`, `--dump-info`, `--lump-info`,
+  `--map-info E1M1/E1M2/E4M1` and `--show-title` (960x600, close exits 0) pass.
+
+Intentional differences and limits at 0.2.0:
+
+- Single WAD only; no PWAD overlay or multi-WAD directory.
+- `LumpCache.pbi` is deferred. The original renderer column cache and sector
+  bounding boxes are not required for M2 acceptance and remain M3/M4 work.
+- Texture composition uses row-major pixel and mask planes rather than the
+  original column-cache structures; visible results are equivalent for M2's
+  resource validation.
+- `F_SKY1` is treated as a normal flat name for binding; sky rendering is M4.
+- Linux x64 build/runtime is **NOT RUN**. `bash -n` is not treated as Linux
+  validation.
 
 ## Compatibility conventions adopted so far
 

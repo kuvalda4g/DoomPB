@@ -6,7 +6,7 @@
 # header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/presentation,
 # COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definition, composite wall-texture,
 # flat/sprite namespace, vanilla map binary and map loader/validation unit
-# tests, and smoke tests
+# tests, M2 end-to-end resource/map integration tests, and smoke tests
 # against the produced executable: --version, --help, no-argument startup,
 # unknown-option handling, --lump-info argument validation and nonblocking
 # --show-title failures. No commercial game data and no display are needed.
@@ -30,6 +30,7 @@ COMPOSITE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadCompositeTests"
 FLAT_SPRITE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadFlatSpriteTests"
 MAP_TYPES_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadMapTypesTests"
 MAP_LOADER_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadMapLoaderTests"
+INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M2IntegrationTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -543,9 +544,53 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+printf '\n== M2 end-to-end integration test build ==\n'
+run_build --check --integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M2 integration test syntax check exits with 0\n'
+else
+    printf 'FAIL: M2 integration test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M2 integration test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M2 integration test build exits with 0\n'
+else
+    printf 'FAIL: M2 integration test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M2 integration test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${INTEGRATION_TEST_BIN}" ]; then
+    printf 'PASS: M2 integration test output exists: %s\n' "${INTEGRATION_TEST_BIN}"
+else
+    printf 'FAIL: M2 integration test output missing: %s\n' "${INTEGRATION_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M2 integration test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M2 end-to-end integration tests ==\n'
+"${INTEGRATION_TEST_BIN}"
+integration_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${integration_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M2 integration tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M2 integration tests exit with %s\n' "${integration_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
 printf '\n== Smoke tests ==\n'
 
-check_case '--version exits with 0 and prints DoomPB 0.1.0' 0 '^DoomPB 0\.1\.0$' --version
+check_case '--version exits with 0 and prints DoomPB 0.2.0' 0 '^DoomPB 0\.2\.0$' --version
 check_case '--help exits with 0 and prints usage' 0 '^Usage:' --help
 
 # --help also has to mention both options; check that separately to keep the

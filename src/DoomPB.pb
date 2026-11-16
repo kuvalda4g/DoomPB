@@ -19,7 +19,7 @@ XIncludeFile "Graphics/Video.pbi"
 XIncludeFile "Map/MapLoader.pbi"
 
 #DoomPB_Name    = "DoomPB"
-#DoomPB_Version = "0.1.0"
+#DoomPB_Version = "0.2.0"
 
 ; Exit-code convention shared with scripts/test.ps1 and scripts/test.sh.
 #DoomPB_ExitOk      = 0

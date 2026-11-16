@@ -34,6 +34,7 @@ XIncludeFile "Blockmap.pbi"
 Structure MapLevel
   Magic.l
   Ready.l
+  Name.s
   MarkerIndex.l
   *FrontSector.Long
   *BackSector.Long
@@ -116,6 +117,7 @@ Procedure MapLevelReset(*Level.MapLevel)
 
   *Level\Magic = 0
   *Level\Ready = 0
+  *Level\Name = ""
   *Level\MarkerIndex = 0
   *Level\FrontSector = 0
   *Level\BackSector = 0

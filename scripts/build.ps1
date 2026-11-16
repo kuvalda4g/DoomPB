@@ -54,6 +54,10 @@
     Build the synthetic map loader/validation unit-test program
     (tests/unit/wad_map_loader_tests.pb) instead of the main executable.
 
+.PARAMETER IntegrationTest
+    Build the M2 end-to-end resource/map integration test program
+    (tests/integration/m2_release_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -90,6 +94,9 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -MapLoaderTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -IntegrationTest
 #>
 [CmdletBinding()]
 param(
@@ -104,6 +111,7 @@ param(
     [switch]$FlatSpriteTest,
     [switch]$MapTypesTest,
     [switch]$MapLoaderTest,
+    [switch]$IntegrationTest,
     [string]$CompilerPath = ''
 )
 
@@ -124,12 +132,16 @@ if ($CompositeTest) { $selectedTargets++ }
 if ($FlatSpriteTest) { $selectedTargets++ }
 if ($MapTypesTest) { $selectedTargets++ }
 if ($MapLoaderTest) { $selectedTargets++ }
+if ($IntegrationTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($MapLoaderTest) {
+if ($IntegrationTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m2_release_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M2IntegrationTests.exe'
+} elseif ($MapLoaderTest) {
     $sourceFile = Join-Path $repoRoot 'tests\unit\wad_map_loader_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-WadMapLoaderTests.exe'
 } elseif ($MapTypesTest) {

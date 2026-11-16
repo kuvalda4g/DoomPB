@@ -6,8 +6,9 @@
     Performs a real PureBasic syntax check, a real build, the synthetic WAD
     header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/
     presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definition, composite
-    wall-texture, flat/sprite namespace, vanilla map binary and map loader/
-    validation unit tests, and smoke tests against the produced executable:
+    wall-texture, flat/sprite namespace, vanilla map binary, map loader/
+    validation and M2 end-to-end resource/map integration unit tests, and smoke
+    tests against the produced executable:
     --version, --help, no-argument startup, unknown-option handling,
     --lump-info argument validation and nonblocking --show-title failures.
     No commercial game data and no display are needed.
@@ -41,6 +42,7 @@ $compositeTestExe = Join-Path $repoRoot 'build\DoomPB-WadCompositeTests.exe'
 $flatSpriteTestExe = Join-Path $repoRoot 'build\DoomPB-WadFlatSpriteTests.exe'
 $mapTypesTestExe = Join-Path $repoRoot 'build\DoomPB-WadMapTypesTests.exe'
 $mapLoaderTestExe = Join-Path $repoRoot 'build\DoomPB-WadMapLoaderTests.exe'
+$integrationTestExe = Join-Path $repoRoot 'build\DoomPB-M2IntegrationTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -60,11 +62,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -277,11 +279,29 @@ $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "synthetic WAD map loader tests exit with 0 (got $status)"
 
 Write-Host ''
+Write-Host '== M2 end-to-end integration test build =='
+$status = Invoke-BuildStep -Check -IntegrationTest
+Test-Condition ($status -eq 0) "M2 integration test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -IntegrationTest
+Test-Condition ($status -eq 0) "M2 integration test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $integrationTestExe -PathType Leaf) "M2 integration test output exists: $integrationTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $integrationTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M2 integration test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M2 end-to-end integration tests =='
+& $integrationTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M2 integration tests exit with 0 (got $status)"
+
+Write-Host ''
 Write-Host '== Smoke tests =='
 
 $result = Invoke-DoomPB -Arguments @('--version')
 Test-Condition ($result.ExitCode -eq 0) "--version exits with 0 (got $($result.ExitCode))"
-Test-Condition ($result.Output -match '(?m)^DoomPB 0\.1\.0\s*$') "--version prints 'DoomPB 0.1.0' (got: $($result.Output.Trim()))"
+Test-Condition ($result.Output -match '(?m)^DoomPB 0\.2\.0\s*$') "--version prints 'DoomPB 0.2.0' (got: $($result.Output.Trim()))"
 
 $result = Invoke-DoomPB -Arguments @('--help')
 Test-Condition ($result.ExitCode -eq 0) "--help exits with 0 (got $($result.ExitCode))"

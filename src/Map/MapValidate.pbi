@@ -29,18 +29,138 @@ XIncludeFile "MapLevel.pbi"
 XIncludeFile "../Graphics/Flat.pbi"
 XIncludeFile "../Graphics/TextureDefs.pbi"
 
+Structure MapSlotNameOut
+  Value.s
+EndStructure
+
+; Reads one 8-byte flat slot. Returns 0 when *Name holds a name, 2 on a
+; canonical error (error text includes map, sector and field).
+Procedure.i MapReadFlatSlotName(*Level.MapLevel, SectorIndex.i, Field.i, *Name.MapSlotNameOut)
+  Protected byteIndex.i
+  Protected value.i
+  Protected sawNul.i
+  Protected result.s = ""
+  Protected fieldName.s
+  Protected prefix.s
+
+  If Field = 0
+    fieldName = "floor flat"
+  Else
+    fieldName = "ceiling flat"
+  EndIf
+  prefix = *Level\Name + " sector " + Str(SectorIndex) + " " + fieldName
+
+  sawNul = #False
+  For byteIndex = 0 To 7
+    value = MapSectorsNameByte(@*Level\Sectors, SectorIndex, Field, byteIndex)
+    If value < 0
+      MapLevelSetError(prefix + ": cannot read name bytes.")
+      ProcedureReturn 2
+    EndIf
+    If sawNul
+      If value <> 0 And value <> 32
+        MapLevelSetError(prefix + " has a noncanonical name (embedded NUL).")
+        ProcedureReturn 2
+      EndIf
+    ElseIf value = 0
+      sawNul = #True
+    ElseIf value < 32 Or value > 126
+      MapLevelSetError(prefix + " has a nonprintable name byte.")
+      ProcedureReturn 2
+    Else
+      result + Chr(value)
+    EndIf
+  Next
+
+  If Len(result) = 0
+    MapLevelSetError(prefix + " is empty.")
+    ProcedureReturn 2
+  EndIf
+  *Name\Value = result
+  ProcedureReturn 0
+EndProcedure
+
+; Reads one 8-byte wall slot. Returns 0 with a name, 1 for a canonical
+; "-"/all-NUL unused slot, 2 on a canonical error.
+Procedure.i MapReadWallSlotName(*Level.MapLevel, SideIndex.i, Field.i, *Name.MapSlotNameOut)
+  Protected byteIndex.i
+  Protected value.i
+  Protected sawNul.i
+  Protected result.s = ""
+  Protected fieldName.s
+  Protected prefix.s
+
+  Select Field
+    Case 0
+      fieldName = "upper texture"
+    Case 1
+      fieldName = "lower texture"
+    Default
+      fieldName = "middle texture"
+  EndSelect
+  prefix = *Level\Name + " sidedef " + Str(SideIndex) + " " + fieldName
+
+  value = MapSidedefsNameByte(@*Level\Sidedefs, SideIndex, Field, 0)
+  If value < 0
+    MapLevelSetError(prefix + ": cannot read name bytes.")
+    ProcedureReturn 2
+  EndIf
+
+  If value = 0 Or value = Asc("-")
+    ; Canonical unused slot: the remaining seven bytes must be NUL or space.
+    For byteIndex = 1 To 7
+      value = MapSidedefsNameByte(@*Level\Sidedefs, SideIndex, Field, byteIndex)
+      If value < 0
+        MapLevelSetError(prefix + ": cannot read name bytes.")
+        ProcedureReturn 2
+      EndIf
+      If value <> 0 And value <> 32
+        If MapSidedefsNameByte(@*Level\Sidedefs, SideIndex, Field, 0) = Asc("-")
+          MapLevelSetError(prefix + " has a noncanonical '-' sentinel (trailing bytes).")
+        Else
+          MapLevelSetError(prefix + " has a noncanonical empty name (embedded NUL).")
+        EndIf
+        ProcedureReturn 2
+      EndIf
+    Next
+    *Name\Value = ""
+    ProcedureReturn 1
+  EndIf
+
+  sawNul = #False
+  For byteIndex = 0 To 7
+    value = MapSidedefsNameByte(@*Level\Sidedefs, SideIndex, Field, byteIndex)
+    If value < 0
+      MapLevelSetError(prefix + ": cannot read name bytes.")
+      ProcedureReturn 2
+    EndIf
+    If sawNul
+      If value <> 0 And value <> 32
+        MapLevelSetError(prefix + " has a noncanonical name (embedded NUL).")
+        ProcedureReturn 2
+      EndIf
+    ElseIf value = 0
+      sawNul = #True
+    ElseIf value < 32 Or value > 126
+      MapLevelSetError(prefix + " has a nonprintable name byte.")
+      ProcedureReturn 2
+    Else
+      result + Chr(value)
+    EndIf
+  Next
+  *Name\Value = result
+  ProcedureReturn 0
+EndProcedure
+
 ; Optional resource binding; either catalog may be null to skip that category.
 Procedure.i MapLevelValidateResources(*Level.MapLevel, *Flats.FlatCatalog, *Textures.TextureCatalog)
   Protected i.i
   Protected field.i
-  Protected byteIndex.i
-  Protected value.i
-  Protected length.i
-  Protected sawNul.i
+  Protected status.i
   Protected query.s
+  Protected nameOut.MapSlotNameOut
   Protected sectorCount.i
   Protected sideCount.i
-  Protected nameCount.i
 
   If *Level = 0 Or *Level\Magic <> #MAPLEVEL_Magic Or *Level\Ready = 0
     MapLevelSetError("Map level is not ready.")
@@ -57,41 +177,20 @@ Procedure.i MapLevelValidateResources(*Level.MapLevel, *Flats.FlatCatalog, *Text
   If *Flats <> 0
     For i = 0 To sectorCount - 1
       For field = 0 To 1
-        length = 0
-        sawNul = #False
-        For byteIndex = 0 To 7
-          value = MapSectorsNameByte(@*Level\Sectors, i, field, byteIndex)
-          If value < 0
-            MapLevelSetError("Cannot read sector " + Str(i) + " flat name.")
-            ProcedureReturn #False
-          EndIf
-          If sawNul
-            If value <> 0
-              MapLevelSetError("Sector " + Str(i) + " has a noncanonical flat name (embedded NUL).")
-              ProcedureReturn #False
-            EndIf
-          Else
-            If value = 0
-              sawNul = #True
-            ElseIf value < 32 Or value > 126
-              MapLevelSetError("Sector " + Str(i) + " has a nonprintable flat name.")
-              ProcedureReturn #False
-            Else
-              query + Chr(value)
-              length + 1
-            EndIf
-          EndIf
-        Next
-        If length = 0
-          MapLevelSetError("Sector " + Str(i) + " has an empty flat name.")
+        nameOut\Value = ""
+        status = MapReadFlatSlotName(*Level, i, field, @nameOut)
+        If status <> 0
           ProcedureReturn #False
         EndIf
+        query = nameOut\Value
         If FlatCatalogFindName(*Flats, query) < 0
-          MapLevelSetError("Sector " + Str(i) + " flat not found: " + query)
-          query = ""
+          If field = 0
+            MapLevelSetError(*Level\Name + " sector " + Str(i) + " floor flat not found: " + query)
+          Else
+            MapLevelSetError(*Level\Name + " sector " + Str(i) + " ceiling flat not found: " + query)
+          EndIf
           ProcedureReturn #False
         EndIf
-        query = ""
       Next
     Next
   EndIf
@@ -99,46 +198,24 @@ Procedure.i MapLevelValidateResources(*Level.MapLevel, *Flats.FlatCatalog, *Text
   If *Textures <> 0
     For i = 0 To sideCount - 1
       For field = 0 To 2
-        value = MapSidedefsNameByte(@*Level\Sidedefs, i, field, 0)
-        If value < 0
-          MapLevelSetError("Cannot read sidedef " + Str(i) + " texture name.")
+        nameOut\Value = ""
+        status = MapReadWallSlotName(*Level, i, field, @nameOut)
+        If status = 2
           ProcedureReturn #False
         EndIf
-        ; "-" and all-NUL mean no texture for this wall slot.
-        If value <> 0 And value <> Asc("-")
-          length = 0
-          sawNul = #False
-          For byteIndex = 0 To 7
-            value = MapSidedefsNameByte(@*Level\Sidedefs, i, field, byteIndex)
-            If value < 0
-              MapLevelSetError("Cannot read sidedef " + Str(i) + " texture name.")
-              ProcedureReturn #False
-            EndIf
-            If sawNul
-              If value <> 0
-                MapLevelSetError("Sidedef " + Str(i) + " has a noncanonical texture name (embedded NUL).")
-                ProcedureReturn #False
-              EndIf
-            Else
-              If value = 0
-                sawNul = #True
-              ElseIf value < 32 Or value > 126
-                MapLevelSetError("Sidedef " + Str(i) + " has a nonprintable texture name.")
-                ProcedureReturn #False
-              Else
-                query + Chr(value)
-                length + 1
-              EndIf
-            EndIf
-          Next
-          If length > 0
-            If TextureCatalogFindName(*Textures, query) < 0
-              MapLevelSetError("Sidedef " + Str(i) + " texture not found: " + query)
-              query = ""
-              ProcedureReturn #False
-            EndIf
+        query = nameOut\Value
+        If status = 0
+          If TextureCatalogFindName(*Textures, query) < 0
+            Select field
+              Case 0
+                MapLevelSetError(*Level\Name + " sidedef " + Str(i) + " upper texture not found: " + query)
+              Case 1
+                MapLevelSetError(*Level\Name + " sidedef " + Str(i) + " lower texture not found: " + query)
+              Default
+                MapLevelSetError(*Level\Name + " sidedef " + Str(i) + " middle texture not found: " + query)
+            EndSelect
+            ProcedureReturn #False
           EndIf
-          query = ""
         EndIf
       Next
     Next

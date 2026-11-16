@@ -28,10 +28,11 @@ COMPOSITE_TEST_BUILD=0
 FLAT_SPRITE_TEST_BUILD=0
 MAP_TYPES_TEST_BUILD=0
 MAP_LOADER_TEST_BUILD=0
+INTEGRATION_TEST_BUILD=0
 
 usage() {
     cat <<'EOF'
-Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-test | --resource-test | --texture-def-test | --composite-test | --flat-sprite-test | --map-types-test | --map-loader-test] [--help]
+Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-test | --resource-test | --texture-def-test | --composite-test | --flat-sprite-test | --map-types-test | --map-loader-test | --integration-test] [--help]
 
   (no option)   Syntax-check and build build/DoomPB.
   -k, --check   Run the PureBasic syntax check only.
@@ -54,6 +55,8 @@ Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-te
                 Build the vanilla map binary test program instead.
   -L, --map-loader-test
                 Build the map loader/validation test program instead.
+  -I, --integration-test
+                Build the M2 end-to-end integration test program instead.
   -h, --help    Show this help and exit.
 
 Compiler discovery: PB_COMPILER, then pbcompiler on PATH, then common
@@ -133,6 +136,9 @@ while [ $# -gt 0 ]; do
         -L|--map-loader-test)
             MAP_LOADER_TEST_BUILD=1
             ;;
+        -I|--integration-test)
+            INTEGRATION_TEST_BUILD=1
+            ;;
         -h|--help)
             usage
             exit 0
@@ -148,7 +154,7 @@ done
 
 [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 
-selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD + DISPLAY_TEST_BUILD + RESOURCE_TEST_BUILD + TEXTURE_DEF_TEST_BUILD + COMPOSITE_TEST_BUILD + FLAT_SPRITE_TEST_BUILD + MAP_TYPES_TEST_BUILD + MAP_LOADER_TEST_BUILD))
+selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD + DISPLAY_TEST_BUILD + RESOURCE_TEST_BUILD + TEXTURE_DEF_TEST_BUILD + COMPOSITE_TEST_BUILD + FLAT_SPRITE_TEST_BUILD + MAP_TYPES_TEST_BUILD + MAP_LOADER_TEST_BUILD + INTEGRATION_TEST_BUILD))
 if [ "${selected_targets}" -gt 1 ]; then
     fail 'test targets select different programs; choose one.'
 fi
@@ -210,6 +216,12 @@ fi
 if [ "${MAP_LOADER_TEST_BUILD}" -eq 1 ]; then
     SOURCE_FILE="${REPO_ROOT}/tests/unit/wad_map_loader_tests.pb"
     OUTPUT_FILE="${BUILD_DIR}/DoomPB-WadMapLoaderTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
+
+if [ "${INTEGRATION_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/integration/m2_release_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-M2IntegrationTests"
     [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 fi
 

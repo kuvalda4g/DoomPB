@@ -370,6 +370,7 @@ Procedure.i MapLevelLoad(Name.s, *Level.MapLevel)
   EndIf
 
   *Level\MarkerIndex = markerIndex
+  *Level\Name = canonical
   If MapValidateLevel(*Level) = #False
     Goto MapLoadFail
   EndIf

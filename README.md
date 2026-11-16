@@ -5,14 +5,15 @@ in **PureBasic**. The goal is to reproduce the behaviour of id Software's
 **Linux Doom 1.10** — software renderer, fixed-point arithmetic, 35 Hz game
 ticks and WAD compatibility — rather than to reimagine it.
 
-> **Status: `0.1.0` — milestone M1 complete on Windows x64; M2 in progress.**
-> The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`
-> and Doom patches, composites titles and wall textures, and presents `TITLEPIC`
-> in a native 960x600 window at 3x nearest-neighbour. M2 adds `COLORMAP`,
-> `PNAMES`, `TEXTURE1`/`TEXTURE2`, composite wall textures, flat/sprite
-> namespaces, bounds-checked decoders for all ten vanilla map lumps, and a
-> validated level loader with cross-reference/BSP checks. The world renderer and
-> gameplay are still pending. Linux x64 runtime is **NOT RUN**.
+> **Status: `0.2.0` — milestone M2 complete on Windows x64 (prepared, owner commit/tag pending).**
+> The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`,
+> `COLORMAP`, `PNAMES`, `TEXTURE1`/`TEXTURE2`, composites titles and wall
+> textures, reads flats and sprite metadata, and presents `TITLEPIC` in a native
+> 960x600 window at 3x nearest-neighbour. M2 adds bounds-checked decoders for all
+> ten vanilla map lumps, a validated level loader with cross-reference/BSP/REJECT/
+> BLOCKMAP checks, and end-to-end resource binding of map flats and wall
+> textures. The world renderer and gameplay are still pending. Linux x64 runtime
+> is **NOT RUN**. No Git tag exists until the owner creates it.
 
 ## Legal notice
 
@@ -77,6 +78,9 @@ repository.
 # Build the map loader/validation tests -> build/DoomPB-WadMapLoaderTests.exe
 ./scripts/build.ps1 -MapLoaderTest
 
+# Build the M2 end-to-end integration tests -> build/DoomPB-M2IntegrationTests.exe
+./scripts/build.ps1 -IntegrationTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -120,19 +124,22 @@ repository.
 # Build the map loader/validation tests -> build/DoomPB-WadMapLoaderTests
 ./scripts/build.sh --map-loader-test
 
+# Build the M2 end-to-end integration tests -> build/DoomPB-M2IntegrationTests
+./scripts/build.sh --integration-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, all ten synthetic WAD
+The test scripts run a real syntax check, a real build, all eleven synthetic WAD
 test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding,
 framebuffer/presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definitions,
-composite wall textures, flat/sprite namespaces, vanilla map binaries and map
-loader/cross-reference validation), and smoke tests against the produced
-executable. They need no game data and no graphical display; no window is
-opened by the automated suite.
+composite wall textures, flat/sprite namespaces, vanilla map binaries, map
+loader/cross-reference validation and M2 end-to-end resource/map integration),
+and smoke tests against the produced executable. They need no game data and no
+graphical display; no window is opened by the automated suite.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -486,6 +493,44 @@ MapLevelValidateResources(*Level, *Flats, *Textures)   ; optional binding
   flats and `-`/NUL-free wall texture names in already decoded catalogs.
 - `--map-info <ExMy>` prints marker index, record counts, REJECT requirement,
   BLOCKMAP dimensions, BSP root and reachability, or exits 1 with a diagnostic.
+
+## M2 integration and release acceptance (M2-07)
+
+`tests/integration/m2_release_tests.pb` orchestrates the existing M1/M2 APIs
+without duplicating parsers. It covers 32 synthetic scenarios (E01-E32) plus
+three lifecycle integration cases (I01-I03):
+
+- WAD directory -> `PNAMES`/`TEXTURE1`/`TEXTURE2` -> resolved patches ->
+  composed wall textures; flat namespaces and `FlatLoad`; sprite frame metadata
+  and paired-flip handling.
+- Ten-lump map load, cross-reference/BSP/REJECT/BLOCKMAP validation, and the
+  actual `MapLevelValidateResources` call with both catalogs.
+- `TEXTURE1` first-definition precedence, last-match patch lumps, namespace
+  isolation, malformed patch/flat/PNAMES/TEXTURE failure paths.
+- Ownership after `WADClose`, explicit `TextureCatalogInvalidateResolved` after
+  reopen, fresh resolution on WAD B, and deterministic A -> B -> A results.
+- Canonical FNV-1a64 metadata checksums built only from explicit
+  little-endian fields (never pointers, padding or structure bytes).
+- Legacy CLI smoke checks (`--version`, `--help`, `--dump-info`, `--lump-info`)
+  and documented failure exit codes.
+
+Passing an optional WAD path runs I04 against a legal local IWAD read-only:
+
+```text
+DoomPB-M2IntegrationTests.exe <path-to-DOOM.WAD>
+```
+
+I04 decodes `PLAYPAL`/`COLORMAP`, resolves all 287 wall textures, composes them
+(3,595,870 opaque pixels on the known 1.9ud fixture), builds 111 interior flats
+and 764 sprite entries, then loads E1M1/E1M2/E4M1 and calls
+`MapLevelValidateResources` with both catalogs. It reports reference/distinct
+counts and stable metadata checksums. The IWAD is never modified, and no game
+content or reconstructed images are written.
+
+Known limitations at `0.2.0`: single-WAD operation, no PWAD overlay support, no
+generic `LumpCache` or renderer-side column cache, no world rendering or
+gameplay, and no Linux runtime validation. `F_SKY1` is accepted as an ordinary
+flat for resource binding; sky rendering belongs to M4.
 
 ## Framebuffer and presentation
 
