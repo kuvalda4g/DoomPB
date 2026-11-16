@@ -5,7 +5,8 @@
 # Performs a real PureBasic syntax check, a real build, the synthetic WAD
 # header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/presentation,
 # COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definition, composite wall-texture,
-# flat/sprite namespace and vanilla map binary unit tests, and smoke tests
+# flat/sprite namespace, vanilla map binary and map loader/validation unit
+# tests, and smoke tests
 # against the produced executable: --version, --help, no-argument startup,
 # unknown-option handling, --lump-info argument validation and nonblocking
 # --show-title failures. No commercial game data and no display are needed.
@@ -28,6 +29,7 @@ TEXTURE_DEF_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadTextureDefsTests"
 COMPOSITE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadCompositeTests"
 FLAT_SPRITE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadFlatSpriteTests"
 MAP_TYPES_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadMapTypesTests"
+MAP_LOADER_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadMapLoaderTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -494,6 +496,50 @@ if [ "${map_types_status}" -eq 0 ]; then
     printf 'PASS: synthetic WAD map binary tests exit with 0\n'
 else
     printf 'FAIL: synthetic WAD map binary tests exit with %s\n' "${map_types_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== WAD map loader/validation test build ==\n'
+run_build --check --map-loader-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD map loader test syntax check exits with 0\n'
+else
+    printf 'FAIL: WAD map loader test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD map loader test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --map-loader-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: WAD map loader test build exits with 0\n'
+else
+    printf 'FAIL: WAD map loader test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD map loader test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${MAP_LOADER_TEST_BIN}" ]; then
+    printf 'PASS: WAD map loader test output exists: %s\n' "${MAP_LOADER_TEST_BIN}"
+else
+    printf 'FAIL: WAD map loader test output missing: %s\n' "${MAP_LOADER_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: WAD map loader test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== WAD map loader/validation unit tests ==\n'
+"${MAP_LOADER_TEST_BIN}"
+map_loader_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${map_loader_status}" -eq 0 ]; then
+    printf 'PASS: synthetic WAD map loader tests exit with 0\n'
+else
+    printf 'FAIL: synthetic WAD map loader tests exit with %s\n' "${map_loader_status}" >&2
     FAILURES=$((FAILURES + 1))
 fi
 

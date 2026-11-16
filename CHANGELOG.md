@@ -39,10 +39,24 @@ is not a `0.2.0` release note.
   (`src/Map/MapTypes.pbi`, `MapDecode.pbi`, `Blockmap.pbi`).
 - Synthetic M01-M48 map tests plus I01-I03 and `-MapTypesTest` /
   `--map-types-test` build target.
+- Transactional vanilla map loader that locates the zero-length `E#M#` marker,
+  verifies the adjacent ten-lump order and assembles an owned, validated level
+  (`src/Map/MapLoader.pbi`, `src/Map/MapLevel.pbi`).
+- Cross-reference validation for vertices, lines, sides, sectors, segs and
+  subsectors, derived front/back links, per-sector line membership, iterative
+  BSP reachability/cycle detection, REJECT size and BLOCKMAP line checks
+  (`src/Map/MapValidate.pbi`).
+- Optional flat/texture catalog binding and `--map-info <ExMy>` diagnostics.
+- Synthetic L01-L52 map loader tests plus I01-I03 and `-MapLoaderTest` /
+  `--map-loader-test` build target.
 
 ### Verified
 
-- Windows x64, PureBasic 6.41: complete suite passes with 56/56 script checks.
+- Windows x64, PureBasic 6.41: complete suite passes with 60/60 script checks.
+- New map loader tests: 52 format/validation cases plus 3 integration cases
+  (167 assertions).
+- Local Ultimate Doom maps load and validate read-only: E1M1, E1M2 and E4M1
+  pass cross-reference, BSP reachability, REJECT-size and BLOCKMAP-line checks.
 - New resource tests: 28 synthetic cases plus 3 integration cases.
 - New texture-definition tests: 20 binary cases, 10 resolution cases and
   3 integration cases (165 assertions).

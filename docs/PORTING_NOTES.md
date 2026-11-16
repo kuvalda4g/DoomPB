@@ -9,7 +9,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 |---|---|---|
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
-| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`; M2-05 map binary decoders implemented locally, not yet committed; map loading/cross-validation and renderer pending |
+| M2 - Resources and map loading | in progress | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`, M2-05 as `2fb2481`; M2-06 map loader/cross-validation implemented locally, not yet committed; renderer pending |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -681,7 +681,8 @@ Fixed-record semantics:
 - Records are stored as native arrays; results are independent of the input
   buffer and WAD lifetime. Caps: 65,536 records per type.
 - Cross-lump references (vertex/side/sector ranges, BSP child ranges, blockmap
-  line numbers, REJECT size vs sector count) are deliberately deferred to M2-06.
+  line numbers, REJECT size vs sector count) are deliberately deferred to M2-06
+  and implemented there.
 
 REJECT:
 
@@ -720,6 +721,91 @@ Verified behaviour:
     BLOCKMAP 18x9/162 cells.
 - All three real BLOCKMAPs pass the strict list validation.
 - The application remains version 0.1.0; TITLEPIC and CLI are unchanged.
+
+## M2-06 — map loader, cross-reference validation and BSP integrity
+
+Original C symbols consulted (same pinned revision):
+
+- `p_setup.c`: `P_SetupLevel`, `P_LoadThings`, `P_LoadLineDefs`,
+  `P_LoadSideDefs`, `P_LoadVertexes`, `P_LoadSegs`, `P_LoadSubsectors`,
+  `P_LoadNodes`, `P_LoadSectors`, `P_LoadBlockMap`, `P_GroupLines`, and the
+  REJECT length rule `(numSectors*numSectors+7)>>3`.
+- `doomdata.h`: record layouts and `NF_SUBSECTOR`.
+- `r_defs.h`: `line_t`, `seg_t`, `subsector_t`, `node_t`, `sector_t` fields used
+  by the original grouping pass (frontsector/backsector, numlines/lines).
+
+Port mapping:
+
+- `src/Map/MapLoader.pbi`: `MapCanonicalName`, `MapLevelLoad`.
+- `src/Map/MapValidate.pbi`: `MapValidateLevel`, `MapLevelValidateResources`.
+- `src/Map/MapLevel.pbi`: owned level object, reset/readiness and derived-link
+  accessors.
+
+Loading semantics:
+
+- The loader uses the currently open WAD. `MapCanonicalName` accepts only four
+  ASCII characters in `E#M#` form and returns uppercase; `MAPxx` is outside the
+  M2-06 scope. The marker is located with `WADFindLump` (last duplicate wins),
+  must be zero-length, and the following ten directory entries must match the
+  canonical names byte-for-byte in order.
+- Each payload is read into a temporary buffer through the M2-05 decoders and
+  released immediately. The level owns only decoded records and integer arrays;
+  it remains valid after the WAD is closed.
+- Load is transactional. Every failure path (open, name, marker, order, decode,
+  validation) calls `MapLevelReset`, so a failed load never leaves a partially
+  ready level. Reset is idempotent and reuses the same object.
+
+Validation and derived data:
+
+- SIDEDEF sectors must be in `0..NumSectors-1`. LINEDEF vertex and side indices
+  are checked; a back side of `-1` stays a sentinel; `ML_TWOSIDED` requires a
+  real back side. SEGS vertices, linedefs and sides (0/1) are checked, with the
+  front sector taken from the selected side and the back sector from the other
+  side of a two-sided line. Subsector ranges must be nonempty and inside SEGS;
+  the subsector sector comes from its first seg (as in the original grouping).
+- Sector membership follows `P_GroupLines`: a two-pass prefix build followed by
+  a flat fill. A back sector equal to the front sector is not added twice. The
+  original `sector->lines[]` front/back restriction is preserved.
+- BSP children are range-checked first (`NF_SUBSECTOR` leaf index against
+  `NumSubsectors`, otherwise node index against `NumNodes`). Reachability is an
+  iterative DFS from node `NumNodes-1` with explicit node/slot stacks and
+  three-state coloring. Cycles are hard errors; unreachable nodes/subsectors
+  are diagnostics only. A zero-node map is accepted only with exactly one
+  subsector and is reported as a subsector root.
+- REJECT must have at least `(N*N+7)/8` bytes; extra padding is preserved.
+  BLOCKMAP width/height are read from the validated decoder and every referenced
+  line index must be inside LINEDEFS.
+- `MapLevelValidateResources` is a separate optional step. It checks flats and
+  wall texture names against already decoded catalogs, skipping the `-`/all-NUL
+  wall sentinels and rejecting embedded NUL or nonprintable names. It does not
+  retain catalog pointers.
+
+Intentional differences and limits:
+
+- Link derivation is explicit rather than storing raw C pointers. Index arrays
+  preserve the same front/back ordering used by the original grouping. Only the
+  fields required for validation and later rendering are derived.
+- The original loader trusts indices and can crash on corrupt maps. DoomPB
+  rejects the map before publishing a level. The validator also rejects BSP
+  cycles, which the original traversal would loop on (or overflow the stack).
+- The loader does not build the renderer's `sector_t` bounding boxes, sound
+  chains, or thing spawn state; those belong to later milestones.
+- `MAPxx` maps and PWAD overrides are not claimed by M2-06.
+
+Verified behaviour:
+
+- `tests/unit/wad_map_loader_tests.pb` covers L01–L52 plus I01–I03: 55 cases,
+  167 assertions, 0 failures.
+- Real Ultimate Doom integration (read-only, `--map-info`):
+  - E1M1 (marker 7): 143/486/666/470/747/239/238/88 records; REJECT 968/968;
+    BLOCKMAP 36x23, 828 cells; root node 237; 238/238 nodes and 239/239
+    subsectors reachable.
+  - E1M2 (marker 18): 262/1033/1323/942/1463/448/447/200; REJECT 5000/5000;
+    BLOCKMAP 42x31, 1302 cells; root node 446; full reachability.
+  - E4M1 (marker 304): 141/471/642/439/695/196/195/81; REJECT 821/821;
+    BLOCKMAP 18x9, 162 cells; root node 194; full reachability.
+- `scripts/test.ps1`: 60/60 checks pass on Windows x64 with PureBasic 6.41.
+- Application version remains 0.1.0; Linux x64 is NOT RUN.
 
 ## Compatibility conventions adopted so far
 

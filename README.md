@@ -10,9 +10,9 @@ ticks and WAD compatibility — rather than to reimagine it.
 > and Doom patches, composites titles and wall textures, and presents `TITLEPIC`
 > in a native 960x600 window at 3x nearest-neighbour. M2 adds `COLORMAP`,
 > `PNAMES`, `TEXTURE1`/`TEXTURE2`, composite wall textures, flat/sprite
-> namespaces and bounds-checked decoders for all ten vanilla map lumps. Map
-> loading/cross-validation, the world renderer and gameplay are still pending.
-> Linux x64 runtime is **NOT RUN**.
+> namespaces, bounds-checked decoders for all ten vanilla map lumps, and a
+> validated level loader with cross-reference/BSP checks. The world renderer and
+> gameplay are still pending. Linux x64 runtime is **NOT RUN**.
 
 ## Legal notice
 
@@ -74,6 +74,9 @@ repository.
 # Build the vanilla map binary tests -> build/DoomPB-WadMapTypesTests.exe
 ./scripts/build.ps1 -MapTypesTest
 
+# Build the map loader/validation tests -> build/DoomPB-WadMapLoaderTests.exe
+./scripts/build.ps1 -MapLoaderTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -114,18 +117,22 @@ repository.
 # Build the vanilla map binary tests -> build/DoomPB-WadMapTypesTests
 ./scripts/build.sh --map-types-test
 
+# Build the map loader/validation tests -> build/DoomPB-WadMapLoaderTests
+./scripts/build.sh --map-loader-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, all nine synthetic WAD
+The test scripts run a real syntax check, a real build, all ten synthetic WAD
 test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding,
 framebuffer/presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definitions,
-composite wall textures, flat/sprite namespaces and vanilla map binaries), and
-smoke tests against the produced executable. They need no game data and no
-graphical display; no window is opened by the automated suite.
+composite wall textures, flat/sprite namespaces, vanilla map binaries and map
+loader/cross-reference validation), and smoke tests against the produced
+executable. They need no game data and no graphical display; no window is
+opened by the automated suite.
 
 ```powershell
 ./scripts/test.ps1     # Windows
@@ -145,6 +152,7 @@ DoomPB --help                            Print usage information and exit.
 DoomPB --iwad <path> --dump-info         Print WAD header/directory metadata.
 DoomPB --iwad <path> --lump-info <name>  Print one lump's index, offset and size.
 DoomPB --iwad <path> --show-title        Show TITLEPIC in a 3x window.
+DoomPB --iwad <path> --map-info <ExMy>   Load and validate a vanilla map.
 DoomPB                                   Print the bootstrap status and exit.
 ```
 
@@ -154,9 +162,11 @@ last-duplicate-wins name lookup as the WAD API and prints metadata only.
 `--show-title` loads `PLAYPAL` and `TITLEPIC`, decodes them, composites into the
 indexed framebuffer and opens a native window with a 960x600 client area
 (320x200 at exact 3x nearest-neighbour). The window blocks until it is closed;
-closing it exits with code 0. None of these options prints lump contents. A
-missing or malformed WAD, a missing lump or a graphics failure is reported with
-a non-zero exit code.
+closing it exits with code 0. `--map-info <ExMy>` loads the marker plus the ten
+canonical map lumps through the M2-06 loader, runs cross-reference/BSP/REJECT/
+BLOCKMAP validation and prints counts and diagnostics only. None of these
+options prints lump contents. A missing or malformed WAD, a missing lump, an
+invalid map or a graphics failure is reported with a non-zero exit code.
 
 | Exit code | Meaning |
 |---|---|
@@ -424,11 +434,58 @@ MapBlockmapDecode/Reset/Header/GetCell/GetLine
   budget. Cells may share or reorder list offsets; trailing unreferenced words
   are allowed.
 - Cross-lump reference validation (vertex/sector indices, BSP child ranges,
-  REJECT size vs sectors, BLOCKMAP line ranges) is deferred to M2-06.
+  REJECT size vs sectors, BLOCKMAP line ranges) is performed by the M2-06
+  loader/validator described below.
 - Result objects are caller-owned and zero-initialized once; decode owns private
   copies, Reset is idempotent, and failures clear previous output.
 - Caps: 65,536 records/type, 1,048,576 blockmap cells and 16,000,000 scanned
   list words. These are project safety limits, not Doom format limits.
+
+## Map loading and validation (M2-06)
+
+`src/Map/MapLoader.pbi` assembles a level from the currently open WAD;
+`src/Map/MapValidate.pbi` derives links and validates them;
+`src/Map/MapLevel.pbi` owns the resulting object.
+
+```text
+MapCanonicalName(Name) -> "E#M#" or ""
+MapLevelLoad(Name, *Level)              ; requires an open WAD
+MapLevelReset(*Level)
+MapLevelIsReady(*Level)
+MapLevelGetLinedefLinks(*Level, Line, *Front, *Back)
+MapLevelGetSegLinks(*Level, Seg, *Line, *Side, *Front, *Back)
+MapLevelGetSubsectorSector(*Level, Subsector)
+MapLevelGetBspRoot(*Level, *RootIsSubsector, *RootIndex)
+MapLevelGetSectorLineCount(*Level, Sector)
+MapLevelGetSectorLine(*Level, Sector, Ordinal, *LineIndex)
+MapLevelValidateResources(*Level, *Flats, *Textures)   ; optional binding
+```
+
+- The map marker is found with the normal last-duplicate-wins lookup and must be
+  zero-length. The next ten directory entries must be THINGS, LINEDEFS,
+  SIDEDEFS, VERTEXES, SEGS, SSECTORS, NODES, SECTORS, REJECT, BLOCKMAP in that
+  order, compared as raw eight-byte names.
+- Only the `E#M#` form (four ASCII characters, case-insensitive) is accepted;
+  `MAPxx` is outside M2-06. Load is transactional: any decode or validation
+  failure resets the whole target level, and a successful load has no pointers
+  into WAD buffers or resource catalogs.
+- Reference checks cover linedef vertices and sidedefs, sidedef sectors,
+  two-sided lines without a back side, seg vertices/linedefs/sides, nonempty
+  subsector ranges, and BSP child/leaf indices. Zero nodes are allowed only with
+  exactly one subsector; otherwise the root is the last node.
+- BSP reachability is an iterative DFS with explicit node/slot stacks and
+  three-state coloring, so deep trees cannot overflow the call stack and cycles
+  are rejected. Unreachable nodes/subsectors are reported as diagnostics.
+- `REJECT` must contain at least `ceil(sectors^2 / 8)` bytes. Every BLOCKMAP
+  referenced linedef must be below `NumLinedefs`; the cell count is derived from
+  the validated header.
+- Derived links are caller-owned integer arrays: front/back sector per linedef,
+  front/back sector per seg, sector per subsector and per-sector linedef
+  membership (prefix offsets plus a flat list, deduplicating a back side that
+  names the same sector). `MapLevelValidateResources` is optional and looks up
+  flats and `-`/NUL-free wall texture names in already decoded catalogs.
+- `--map-info <ExMy>` prints marker index, record counts, REJECT requirement,
+  BLOCKMAP dimensions, BSP root and reachability, or exits 1 with a diagnostic.
 
 ## Framebuffer and presentation
 

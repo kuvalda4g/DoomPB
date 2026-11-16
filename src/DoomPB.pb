@@ -16,6 +16,7 @@ XIncludeFile "Graphics/Palette.pbi"
 XIncludeFile "Graphics/Patch.pbi"
 XIncludeFile "Graphics/FrameBuffer.pbi"
 XIncludeFile "Graphics/Video.pbi"
+XIncludeFile "Map/MapLoader.pbi"
 
 #DoomPB_Name    = "DoomPB"
 #DoomPB_Version = "0.1.0"
@@ -37,6 +38,7 @@ Procedure PrintHelp()
   PrintN("  " + #DoomPB_Name + " --iwad <path> --dump-info")
   PrintN("  " + #DoomPB_Name + " --iwad <path> --lump-info <name>")
   PrintN("  " + #DoomPB_Name + " --iwad <path> --show-title")
+  PrintN("  " + #DoomPB_Name + " --iwad <path> --map-info <ExMy>")
   PrintN("")
   PrintN("Options:")
   PrintN("  -h, --help       Show this help and exit")
@@ -47,6 +49,8 @@ Procedure PrintHelp()
   PrintN("                     Print one lump's index, offset and size (requires --iwad)")
   PrintN("      --show-title   Open a window with TITLEPIC at 3x nearest-neighbour")
   PrintN("                     (requires --iwad; close the window to exit)")
+  PrintN("      --map-info <ExMy>")
+  PrintN("                     Load and validate a vanilla Doom map (requires --iwad)")
   PrintN("")
   PrintN("Without options " + #DoomPB_Name + " prints its bootstrap status and exits.")
   PrintN("WAD metadata, named lookup and TITLEPIC presentation are available (M1-04).")
@@ -210,6 +214,51 @@ Procedure.i ShowTitle(Path.s)
   ProcedureReturn exitCode
 EndProcedure
 
+; Loads and validates a map; prints metadata and link counts only.
+Procedure.i PrintMapInfo(Path.s, MapName.s)
+  Protected level.MapLevel
+  Protected canonical.s = MapCanonicalName(MapName)
+
+  If WADOpen(Path) = #False
+    PrintN(#DoomPB_Name + ": " + WADLastError())
+    ProcedureReturn #DoomPB_ExitFailure
+  EndIf
+
+  If MapLevelLoad(MapName, @level) = #False
+    PrintN(#DoomPB_Name + ": " + MapLevelLastError())
+    MapLevelReset(@level)
+    WADClose()
+    ProcedureReturn #DoomPB_ExitFailure
+  EndIf
+
+  PrintN(#DoomPB_Name + " " + #DoomPB_Version)
+  PrintN("WAD file: " + WADGetPath())
+  PrintN("Map: " + canonical)
+  PrintN("Marker index: " + Str(level\MarkerIndex))
+  PrintN("THINGS: " + Str(level\Things\Count))
+  PrintN("LINEDEFS: " + Str(level\Linedefs\Count))
+  PrintN("SIDEDEFS: " + Str(level\Sidedefs\Count))
+  PrintN("VERTEXES: " + Str(level\Vertexes\Count))
+  PrintN("SEGS: " + Str(level\Segs\Count))
+  PrintN("SSECTORS: " + Str(level\Subsectors\Count))
+  PrintN("NODES: " + Str(level\Nodes\Count))
+  PrintN("SECTORS: " + Str(level\Sectors\Count))
+  PrintN("REJECT: " + Str(level\Reject\Size) + " bytes, required " + Str(level\RejectRequired))
+  PrintN("BLOCKMAP: " + Str(level\Blockmap\Width) + "x" + Str(level\Blockmap\Height) + ", cells " + Str(level\BlockmapCells))
+  If level\BspRootIsSubsector
+    PrintN("BSP root: subsector " + Str(level\BspRootIndex))
+  Else
+    PrintN("BSP root: node " + Str(level\BspRootIndex))
+  EndIf
+  PrintN("BSP reachable nodes: " + Str(level\ReachableNodes) + ", unreachable: " + Str(level\UnreachableNodes))
+  PrintN("BSP reachable subsectors: " + Str(level\ReachableSubsectors) + ", unreachable: " + Str(level\UnreachableSubsectors))
+  PrintN("Validation: OK")
+
+  MapLevelReset(@level)
+  WADClose()
+  ProcedureReturn #DoomPB_ExitOk
+EndProcedure
+
 Define argumentCount.i
 Define argument.s
 Define exitCode.i = #DoomPB_ExitOk
@@ -218,6 +267,8 @@ Define dumpInfo.i = #False
 Define lumpInfo.i = #False
 Define lumpName.s = ""
 Define showTitle.i = #False
+Define mapInfo.i = #False
+Define mapName.s = ""
 Define sawIwad.i = #False
 Define index.i
 Define parseError.s = ""
@@ -247,6 +298,9 @@ ElseIf argumentCount = 1
       exitCode = #DoomPB_ExitUsage
     Case "--show-title"
       PrintUsageError("'--show-title' requires '--iwad <path>'.")
+      exitCode = #DoomPB_ExitUsage
+    Case "--map-info"
+      PrintUsageError("'--map-info' requires '--iwad <path> <ExMy>'.")
       exitCode = #DoomPB_ExitUsage
     Default
       PrintUsageError("unknown option '" + argument + "'.")
@@ -297,6 +351,20 @@ Else
         Else
           showTitle = #True
         EndIf
+      Case "--map-info"
+        If mapInfo
+          parseError = "duplicate '--map-info' option."
+        ElseIf index + 1 >= argumentCount
+          parseError = "'--map-info' requires a map name."
+        Else
+          index + 1
+          mapName = ProgramParameter(index)
+          If mapName = ""
+            parseError = "'--map-info' requires a non-empty map name."
+          Else
+            mapInfo = #True
+          EndIf
+        EndIf
       Default
         parseError = "unknown option '" + argument + "'."
     EndSelect
@@ -306,8 +374,8 @@ Else
   If parseError <> ""
     PrintUsageError(parseError)
     exitCode = #DoomPB_ExitUsage
-  ElseIf dumpInfo + lumpInfo + showTitle > 1
-    PrintUsageError("only one of '--dump-info', '--lump-info' and '--show-title' may be used.")
+  ElseIf dumpInfo + lumpInfo + showTitle + mapInfo > 1
+    PrintUsageError("only one of '--dump-info', '--lump-info', '--show-title' and '--map-info' may be used.")
     exitCode = #DoomPB_ExitUsage
   ElseIf dumpInfo And sawIwad
     exitCode = DumpWadInfo(wadPath)
@@ -315,6 +383,8 @@ Else
     exitCode = PrintLumpInfo(wadPath, lumpName)
   ElseIf showTitle And sawIwad
     exitCode = ShowTitle(wadPath)
+  ElseIf mapInfo And sawIwad
+    exitCode = PrintMapInfo(wadPath, mapName)
   ElseIf dumpInfo
     PrintUsageError("'--dump-info' requires '--iwad <path>'.")
     exitCode = #DoomPB_ExitUsage
@@ -324,8 +394,11 @@ Else
   ElseIf showTitle
     PrintUsageError("'--show-title' requires '--iwad <path>'.")
     exitCode = #DoomPB_ExitUsage
+  ElseIf mapInfo
+    PrintUsageError("'--map-info' requires '--iwad <path> <ExMy>'.")
+    exitCode = #DoomPB_ExitUsage
   ElseIf sawIwad
-    PrintUsageError("'--iwad' requires '--dump-info', '--lump-info <name>' or '--show-title'.")
+    PrintUsageError("'--iwad' requires '--dump-info', '--lump-info <name>', '--show-title' or '--map-info <ExMy>'.")
     exitCode = #DoomPB_ExitUsage
   Else
     PrintUsageError("no action specified.")

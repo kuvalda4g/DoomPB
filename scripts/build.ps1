@@ -50,6 +50,10 @@
     Build the synthetic vanilla map binary unit-test program
     (tests/unit/wad_map_types_tests.pb) instead of the main executable.
 
+.PARAMETER MapLoaderTest
+    Build the synthetic map loader/validation unit-test program
+    (tests/unit/wad_map_loader_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -83,6 +87,9 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -MapTypesTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -MapLoaderTest
 #>
 [CmdletBinding()]
 param(
@@ -96,6 +103,7 @@ param(
     [switch]$CompositeTest,
     [switch]$FlatSpriteTest,
     [switch]$MapTypesTest,
+    [switch]$MapLoaderTest,
     [string]$CompilerPath = ''
 )
 
@@ -115,12 +123,16 @@ if ($TextureDefTest) { $selectedTargets++ }
 if ($CompositeTest) { $selectedTargets++ }
 if ($FlatSpriteTest) { $selectedTargets++ }
 if ($MapTypesTest) { $selectedTargets++ }
+if ($MapLoaderTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($MapTypesTest) {
+if ($MapLoaderTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\wad_map_loader_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-WadMapLoaderTests.exe'
+} elseif ($MapTypesTest) {
     $sourceFile = Join-Path $repoRoot 'tests\unit\wad_map_types_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-WadMapTypesTests.exe'
 } elseif ($FlatSpriteTest) {
