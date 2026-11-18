@@ -36,6 +36,17 @@ Language documentation:
 - https://www.purebasic.com/documentation/
 - https://www.purebasic.com/documentation/reference/cli_compiler.html
 
+### Documentation lookup policy — Context7 MCP
+
+When documentation lookup is needed for an external library, tool, CLI or unfamiliar/version-sensitive API, **use the configured Context7 MCP tools first when available**. This is a required lookup step, not a replacement for reading the repository or validating code with the actual compiler.
+
+1. Discover the Context7 tools exposed in this OpenCode session (typically `context7_resolve-library-id` and `context7_query-docs`, or their currently available equivalents). Resolve the library ID before querying unless an exact ID is already known; ask focused questions about the specific API, behavior and version.
+2. For **PureBasic 6.41**, check whether Context7 has a trustworthy matching entry. **Never assume PureBasic is indexed**, substitute another BASIC dialect, or silently use newer/incompatible syntax. When Context7 lacks an appropriate entry or is inconclusive, consult the official PureBasic documentation and installed 6.41 help, then verify uncertain behavior with a disposable compiler probe.
+3. Treat the pinned local original Doom C source as authoritative for Doom algorithms and data formats; use Context7 to verify external APIs and tools, not to override original engine semantics, `AGENTS.md` or project tests.
+4. If Context7 is unavailable, disabled, unauthenticated, times out, or returns no suitable documentation, record the reason and **continue** with official/vendor documentation, local source, compiler checks and tests. Never invent an MCP tool result, library ID, documentation excerpt or source URL.
+5. Keep queries narrow to avoid unnecessary context usage. Never send IWAD data, copyrighted resource payloads, credentials, secrets or private local paths to documentation services. Do not add/install/reconfigure MCP servers or commit API keys without the owner's approval.
+6. In the final implementation report, state `Documentation lookup: Context7 USED (library ID, version, topic) / NO MATCH / UNAVAILABLE / NOT NEEDED`, and list the official/local fallback actually used. Do not claim Context7 was used without a real tool call.
+
 For each ported function or coherent subsystem:
 
 1. Inspect its original C implementation and directly related structures/constants/callers.
@@ -236,6 +247,7 @@ Use concise, verifiable headings:
 ```text
 Task / milestone:
 Original C symbols consulted:
+Documentation lookup: Context7 USED / NO MATCH / UNAVAILABLE / NOT NEEDED; sources checked
 Files changed:
 Behavior implemented:
 Syntax check: PASS / FAIL / NOT RUN (command and reason)
