@@ -7,8 +7,10 @@
     header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/
     presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definition, composite
     wall-texture, flat/sprite namespace, vanilla map binary, map loader/
-    validation and M2 end-to-end resource/map integration unit tests, and smoke
-    tests against the produced executable:
+    validation and M2 end-to-end resource/map integration unit tests, the M3-01
+    fixed-point suite with its optional IWAD harness, the M3-02 BAM angle/exact
+    trig-table/geometry suite with synthetic and optional IWAD integration, and
+    smoke tests against the produced executable:
     --version, --help, no-argument startup, unknown-option handling,
     --lump-info argument validation and nonblocking --show-title failures.
     No commercial game data and no display are needed.
@@ -45,6 +47,9 @@ $mapLoaderTestExe = Join-Path $repoRoot 'build\DoomPB-WadMapLoaderTests.exe'
 $integrationTestExe = Join-Path $repoRoot 'build\DoomPB-M2IntegrationTests.exe'
 $fixedTestExe = Join-Path $repoRoot 'build\DoomPB-FixedMathTests.exe'
 $fixedIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3FixedIwadTests.exe'
+$geometryTestExe = Join-Path $repoRoot 'build\DoomPB-AngleGeometryTests.exe'
+$geometryIntegrationTestExe = Join-Path $repoRoot 'build\DoomPB-M3GeometryTests.exe'
+$geometryIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3GeometryIwadTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -64,11 +69,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest, [switch]$GeometryTest, [switch]$GeometryIntegrationTest, [switch]$GeometryIwadTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -316,6 +321,61 @@ $fixedIwadOutput = & $fixedIwadTestExe 2>&1 | Out-String
 $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "optional IWAD fixed-point tests exit with 0 without a WAD path (got $status)"
 Test-Condition ($fixedIwadOutput -match 'NOT RUN') "optional IWAD fixed-point tests report NOT RUN without a path"
+
+Write-Host ''
+Write-Host '== M3-02 angle/geometry unit test build =='
+$status = Invoke-BuildStep -Check -GeometryTest
+Test-Condition ($status -eq 0) "M3-02 angle/geometry test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -GeometryTest
+Test-Condition ($status -eq 0) "M3-02 angle/geometry test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $geometryTestExe -PathType Leaf) "M3-02 angle/geometry test output exists: $geometryTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $geometryTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3-02 angle/geometry test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-02 angle/geometry unit tests =='
+& $geometryTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M3-02 angle/geometry tests exit with 0 (got $status)"
+
+Write-Host ''
+Write-Host '== M3-02 synthetic geometry integration test build =='
+$status = Invoke-BuildStep -Check -GeometryIntegrationTest
+Test-Condition ($status -eq 0) "M3-02 synthetic geometry integration test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -GeometryIntegrationTest
+Test-Condition ($status -eq 0) "M3-02 synthetic geometry integration test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $geometryIntegrationTestExe -PathType Leaf) "M3-02 synthetic geometry integration test output exists: $geometryIntegrationTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $geometryIntegrationTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3-02 synthetic geometry integration test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-02 synthetic geometry integration tests =='
+& $geometryIntegrationTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M3-02 geometry integration tests exit with 0 (got $status)"
+
+Write-Host ''
+Write-Host '== M3-02 optional IWAD angle/geometry test build =='
+$status = Invoke-BuildStep -Check -GeometryIwadTest
+Test-Condition ($status -eq 0) "M3-02 optional IWAD geometry test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -GeometryIwadTest
+Test-Condition ($status -eq 0) "M3-02 optional IWAD geometry test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $geometryIwadTestExe -PathType Leaf) "M3-02 optional IWAD geometry test output exists: $geometryIwadTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $geometryIwadTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3-02 optional IWAD geometry test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-02 optional IWAD angle/geometry tests (no local path) =='
+$geometryIwadOutput = & $geometryIwadTestExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "optional IWAD geometry tests exit with 0 without a WAD path (got $status)"
+Test-Condition ($geometryIwadOutput -match 'NOT RUN') "optional IWAD geometry tests report NOT RUN without a path"
 
 Write-Host ''
 Write-Host '== M2 end-to-end integration test build =='

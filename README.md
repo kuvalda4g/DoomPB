@@ -12,11 +12,13 @@ ticks and WAD compatibility — rather than to reimagine it.
 > 960x600 window at 3x nearest-neighbour. M2 adds bounds-checked decoders for all
 > ten vanilla map lumps, a validated level loader with cross-reference/BSP/REJECT/
 > BLOCKMAP checks, and end-to-end resource binding of map flats and wall
-> textures. The M3-01 signed 16.16 fixed-point math module and its tests are
-> implemented in the working tree; M3's angles, geometry and wall rendering are
-> not complete. The world renderer and gameplay are still pending. The
-> application version remains `0.2.0`. Linux x64 runtime is **NOT RUN**. No Git
-> tag exists until the owner creates it.
+> textures. The M3-01 signed 16.16 fixed-point math module, the M3-02 raw BAM
+> angle model, exact vanilla sine/tangent/atan tables and checked geometry
+> primitives (`R_PointToAngle`, `R_PointToDist`, `R_PointOnSide`,
+> `R_PointOnSegSide`) are implemented and tested in the working tree. BSP
+> traversal, wall projection, the world renderer and gameplay are still pending;
+> M3 as a whole is not complete. The application version remains `0.2.0`. Linux
+> x64 runtime is **NOT RUN**. No Git tag exists until the owner creates it.
 
 ## Legal notice
 
@@ -84,6 +86,21 @@ repository.
 # Build the M2 end-to-end integration tests -> build/DoomPB-M2IntegrationTests.exe
 ./scripts/build.ps1 -IntegrationTest
 
+# Build the M3-01 fixed-point math tests -> build/DoomPB-FixedMathTests.exe
+./scripts/build.ps1 -FixedTest
+
+# Build the optional M3-01 fixed-point IWAD tests -> build/DoomPB-M3FixedIwadTests.exe
+./scripts/build.ps1 -FixedIwadTest
+
+# Build the M3-02 angle/geometry tests -> build/DoomPB-AngleGeometryTests.exe
+./scripts/build.ps1 -GeometryTest
+
+# Build the M3-02 synthetic geometry integration tests -> build/DoomPB-M3GeometryTests.exe
+./scripts/build.ps1 -GeometryIntegrationTest
+
+# Build the optional M3-02 geometry IWAD tests -> build/DoomPB-M3GeometryIwadTests.exe
+./scripts/build.ps1 -GeometryIwadTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -130,19 +147,37 @@ repository.
 # Build the M2 end-to-end integration tests -> build/DoomPB-M2IntegrationTests
 ./scripts/build.sh --integration-test
 
+# Build the M3-01 fixed-point math tests -> build/DoomPB-FixedMathTests
+./scripts/build.sh --fixed-test
+
+# Build the optional M3-01 fixed-point IWAD tests -> build/DoomPB-M3FixedIwadTests
+./scripts/build.sh --fixed-iwad-test
+
+# Build the M3-02 angle/geometry tests -> build/DoomPB-AngleGeometryTests
+./scripts/build.sh --geometry-test
+
+# Build the M3-02 synthetic geometry integration tests -> build/DoomPB-M3GeometryTests
+./scripts/build.sh --geometry-integration-test
+
+# Build the optional M3-02 geometry IWAD tests -> build/DoomPB-M3GeometryIwadTests
+./scripts/build.sh --geometry-iwad-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
 
 ## Testing
 
-The test scripts run a real syntax check, a real build, all eleven synthetic WAD
-test suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding,
+The test scripts run a real syntax check, a real build, the synthetic WAD/map
+suites (header/directory, lump lookup/payload, PLAYPAL/patch decoding,
 framebuffer/presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definitions,
 composite wall textures, flat/sprite namespaces, vanilla map binaries, map
 loader/cross-reference validation and M2 end-to-end resource/map integration),
-and smoke tests against the produced executable. They need no game data and no
-graphical display; no window is opened by the automated suite.
+the M3-01 fixed-point suite, the M3-02 BAM angle/exact-table/geometry suite,
+the M3-02 synthetic geometry integration suite and both optional IWAD harnesses
+(NOT RUN without a supplied path), plus smoke tests against the produced
+executable. They need no game data and no graphical display; no window is opened
+by the automated suite. `--show-title` remains an owner/gui interactive check.
 
 ```powershell
 ./scripts/test.ps1     # Windows

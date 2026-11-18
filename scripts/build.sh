@@ -31,10 +31,13 @@ MAP_LOADER_TEST_BUILD=0
 INTEGRATION_TEST_BUILD=0
 FIXED_TEST_BUILD=0
 FIXED_IWAD_TEST_BUILD=0
+GEOMETRY_TEST_BUILD=0
+GEOMETRY_INTEGRATION_TEST_BUILD=0
+GEOMETRY_IWAD_TEST_BUILD=0
 
 usage() {
     cat <<'EOF'
-Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-test | --resource-test | --texture-def-test | --composite-test | --flat-sprite-test | --map-types-test | --map-loader-test | --integration-test | --fixed-test | --fixed-iwad-test] [--help]
+Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-test | --resource-test | --texture-def-test | --composite-test | --flat-sprite-test | --map-types-test | --map-loader-test | --integration-test | --fixed-test | --fixed-iwad-test | --geometry-test | --geometry-integration-test | --geometry-iwad-test] [--help]
 
   (no option)   Syntax-check and build build/DoomPB.
   -k, --check   Run the PureBasic syntax check only.
@@ -63,6 +66,15 @@ Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-te
                 Build the M3-01 fixed-point math unit test program instead.
   --fixed-iwad-test
                 Build the optional M3-01 real-IWAD fixed-point integration
+                test program instead.
+  --geometry-test
+                Build the M3-02 BAM angle/trig-table/geometry unit test
+                program instead.
+  --geometry-integration-test
+                Build the M3-02 synthetic module/map-bridge/error integration
+                test program instead.
+  --geometry-iwad-test
+                Build the optional M3-02 real-IWAD angle/geometry integration
                 test program instead.
   -h, --help    Show this help and exit.
 
@@ -152,6 +164,15 @@ while [ $# -gt 0 ]; do
         --fixed-iwad-test)
             FIXED_IWAD_TEST_BUILD=1
             ;;
+        --geometry-test)
+            GEOMETRY_TEST_BUILD=1
+            ;;
+        --geometry-integration-test)
+            GEOMETRY_INTEGRATION_TEST_BUILD=1
+            ;;
+        --geometry-iwad-test)
+            GEOMETRY_IWAD_TEST_BUILD=1
+            ;;
         -h|--help)
             usage
             exit 0
@@ -167,7 +188,7 @@ done
 
 [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 
-selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD + DISPLAY_TEST_BUILD + RESOURCE_TEST_BUILD + TEXTURE_DEF_TEST_BUILD + COMPOSITE_TEST_BUILD + FLAT_SPRITE_TEST_BUILD + MAP_TYPES_TEST_BUILD + MAP_LOADER_TEST_BUILD + INTEGRATION_TEST_BUILD + FIXED_TEST_BUILD + FIXED_IWAD_TEST_BUILD))
+selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD + DISPLAY_TEST_BUILD + RESOURCE_TEST_BUILD + TEXTURE_DEF_TEST_BUILD + COMPOSITE_TEST_BUILD + FLAT_SPRITE_TEST_BUILD + MAP_TYPES_TEST_BUILD + MAP_LOADER_TEST_BUILD + INTEGRATION_TEST_BUILD + FIXED_TEST_BUILD + FIXED_IWAD_TEST_BUILD + GEOMETRY_TEST_BUILD + GEOMETRY_INTEGRATION_TEST_BUILD + GEOMETRY_IWAD_TEST_BUILD))
 if [ "${selected_targets}" -gt 1 ]; then
     fail 'test targets select different programs; choose one.'
 fi
@@ -247,6 +268,24 @@ fi
 if [ "${FIXED_IWAD_TEST_BUILD}" -eq 1 ]; then
     SOURCE_FILE="${REPO_ROOT}/tests/integration/m3_fixed_iwad_tests.pb"
     OUTPUT_FILE="${BUILD_DIR}/DoomPB-M3FixedIwadTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
+
+if [ "${GEOMETRY_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/unit/angle_geometry_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-AngleGeometryTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
+
+if [ "${GEOMETRY_INTEGRATION_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/integration/m3_geometry_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-M3GeometryTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
+
+if [ "${GEOMETRY_IWAD_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/integration/m3_geometry_iwad_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-M3GeometryIwadTests"
     [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 fi
 

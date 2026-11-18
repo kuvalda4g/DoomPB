@@ -66,6 +66,18 @@
     Build the optional M3-01 real-IWAD fixed-point integration test program
     (tests/integration/m3_fixed_iwad_tests.pb) instead of the main executable.
 
+.PARAMETER GeometryTest
+    Build the M3-02 BAM angle/trig-table/geometry unit test program
+    (tests/unit/angle_geometry_tests.pb) instead of the main executable.
+
+.PARAMETER GeometryIntegrationTest
+    Build the M3-02 synthetic module/map-bridge/error integration test program
+    (tests/integration/m3_geometry_tests.pb) instead of the main executable.
+
+.PARAMETER GeometryIwadTest
+    Build the optional M3-02 real-IWAD angle/geometry integration test program
+    (tests/integration/m3_geometry_iwad_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -111,6 +123,15 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -FixedIwadTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -GeometryTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -GeometryIntegrationTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -GeometryIwadTest
 #>
 [CmdletBinding()]
 param(
@@ -128,6 +149,9 @@ param(
     [switch]$IntegrationTest,
     [switch]$FixedTest,
     [switch]$FixedIwadTest,
+    [switch]$GeometryTest,
+    [switch]$GeometryIntegrationTest,
+    [switch]$GeometryIwadTest,
     [string]$CompilerPath = ''
 )
 
@@ -151,12 +175,24 @@ if ($MapLoaderTest) { $selectedTargets++ }
 if ($IntegrationTest) { $selectedTargets++ }
 if ($FixedTest) { $selectedTargets++ }
 if ($FixedIwadTest) { $selectedTargets++ }
+if ($GeometryTest) { $selectedTargets++ }
+if ($GeometryIntegrationTest) { $selectedTargets++ }
+if ($GeometryIwadTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($FixedIwadTest) {
+if ($GeometryIwadTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_geometry_iwad_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3GeometryIwadTests.exe'
+} elseif ($GeometryIntegrationTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_geometry_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3GeometryTests.exe'
+} elseif ($GeometryTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\angle_geometry_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-AngleGeometryTests.exe'
+} elseif ($FixedIwadTest) {
     $sourceFile = Join-Path $repoRoot 'tests\integration\m3_fixed_iwad_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-M3FixedIwadTests.exe'
 } elseif ($FixedTest) {

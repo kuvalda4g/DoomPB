@@ -12,6 +12,9 @@ EnableExplicit
 
 XIncludeFile "Core/Endian.pbi"
 XIncludeFile "Core/Fixed.pbi"
+XIncludeFile "Core/Angle.pbi"
+XIncludeFile "Core/TrigTables.pbi"
+XIncludeFile "Renderer/Geometry.pbi"
 XIncludeFile "WAD/WAD.pbi"
 XIncludeFile "Graphics/Palette.pbi"
 XIncludeFile "Graphics/Patch.pbi"

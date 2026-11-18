@@ -10,7 +10,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
 | M2 - Resources and map loading | complete on Windows x64; `v0.2.0` prepared | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`, M2-05 as `2fb2481`, M2-06 as `2f170c1`; M2-07 integration/version changes are in the working tree pending owner commit/tag; renderer pending; Linux x64 NOT RUN |
-| M3 - Geometry and first walls | in progress: M3-01 only | signed 16.16 math module and tests implemented in the working tree; angles/tables, geometry, BSP and rendering remain M3-02 onward; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
+| M3 - Geometry and first walls | in progress: M3-01 and M3-02 | signed 16.16 math (M3-01) and BAM angles/tables/geometry primitives (M3-02) implemented in the working tree; BSP traversal and wall rendering remain M3-03 onward; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -1028,6 +1028,218 @@ Verified behaviour (Windows x64, PureBasic 6.41):
 Milestone status note: M3-01 implements the math foundation only. M3 as a whole
 (angles/tables, geometry, BSP, wall rendering, v0.3.0) is **not** complete and no
 `v0.3.0` tag/release exists.
+
+## M3-02 — BAM angles, exact trig tables and geometry primitives
+
+Original C symbols consulted (same pinned revision
+`a77dfb96cb91780ca334d0d4cfd86957558007e0`):
+
+- `tables.h`: `FINEANGLES 8192`, `FINEMASK (FINEANGLES-1)`,
+  `ANGLETOFINESHIFT 19`, `finesine[5*FINEANGLES/4]` (10240 effective),
+  `finecosine` pointer = `&finesine[FINEANGLES/4]` (offset 2048),
+  `finetangent[FINEANGLES/2]` (4096), `ANG45/ANG90/ANG180/ANG270`,
+  `SLOPERANGE 2048`, `SLOPEBITS 11`, `DBITS = FRACBITS-SLOPEBITS` (5),
+  `typedef unsigned angle_t`, `tantoangle[SLOPERANGE+1]` (2049) and the
+  `SlopeDiv(unsigned num, unsigned den)` declaration.
+- `tables.c`: the complete literal `finetangent`, `finesine` and `tantoangle`
+  arrays and `SlopeDiv`: `if (den < 512) return SLOPERANGE;`
+  `ans = (num<<3)/(den>>8); return ans <= SLOPERANGE ? ans : SLOPERANGE;`.
+- `r_main.c`: `R_PointOnSide`, `R_PointOnSegSide`, `R_PointToAngle`,
+  `R_PointToAngle2`, `R_PointToDist`; view state `viewx`/`viewy` was declared in
+  `r_state.h` and `R_PointToAngle2` mutates those globals.
+- `r_defs.h`: `vertex_t` fixed `x/y`, `node_t` fixed `x/y/dx/dy`, and `seg_t`
+  vertex pointers plus derived `offset`. `r_bsp.c` consumers: wall-angle calls
+  `R_PointToAngle(line->v1->x, line->v1->y)` and `R_PointOnSide(viewx,viewy,bsp)`
+  at node traversal; `p_maputl.c` game-side helpers were inspected only to
+  confirm they are a distinct function family and were not ported.
+- `r_main.h`: declarations of all five consulted renderer-side functions.
+
+Port mapping:
+
+- `src/Core/Angle.pbi`:
+  - `BamWrap32`, `BamAdd`, `BamSubtract`, `BamNegate` preserve exact low-32
+    unsigned BAM arithmetic, including `0xFFFFFFFF + 1 -> 0` and unsigned
+    negation of a half-turn.
+  - `BamFineIndex` computes `(raw >> 19) & 8191` only after low-32 normalization;
+    `ANG90 -> 2048`, `ANG180 -> 4096`, `ANG270 -> 6144`, `0xFFFFFFFF -> 8191`.
+  - `BamRawInUnsignedDomain` is informational only; any negative or oversized
+    Quad raw input is documented as low-32 normalized rather than rejected.
+  - `BamAngleValue.Raw.q` is the checked output carrier so `ANG180`/`ANG270` are
+    not ambiguous signed-positive `.l` values and zero remains a valid result.
+- `src/Core/TrigTables.pbi` and generated `src/Core/TrigTablesData.pbi`:
+  - Exact pinned values in an immutable DataSection, read through
+    bounds-checked `TrigTangentChecked`, `TrigSineChecked`, `TrigCosineChecked`,
+    `TrigTanToAngleChecked`; `BamSin`/`BamCos` are infallible index-mapped helpers.
+  - Cosine is only the original sine offset `FINEANGLES/4`; no fourth table is
+    generated. Sine index range 0..10239, cosine/fine index 0..8191, tangent
+    0..4095 and tantoangle 0..2048 are all enforced.
+  - `DoomSlopeDivChecked(num.q,den.q,*Result.Long)` accepts exactly the original
+    **unsigned 32-bit** argument domain 0..4294967295; negative or above-2^32
+    Quad inputs are rejected with an untouched output. `den < 512` returns 2048
+    first. `num << 3` deliberately masks the low 32 bits (C unsigned shift
+    wraparound), `den >> 8` is unsigned, the division is unsigned64 exact, and
+    the result is capped at `SLOPERANGE`.
+- `src/Renderer/Geometry.pbi`:
+  - `GeometryPointToAngleChecked(viewX,viewY,x,y,*BamAngleValue)` uses the exact
+    eight-octant `x>=0/y>=0/x>y` branches, `ANG90-1`, `ANG180-1`, `ANG270-1`,
+    unsigned `-tantoangle` and modulo-2^32 sums.
+  - `GeometryPointToAngle2Checked(x1,y1,x2,y2)` is the same computation with an
+    explicit origin; unlike C `R_PointToAngle2` it does not mutate global
+    `viewx/viewy` state. Numerically it equals the C wrapper for all tested
+    vectors, including nonzero origins.
+  - `GeometryPointToDistChecked` retains `dx/dy = abs(x-viewx/y-viewy)`, larger-
+    first swap, guarded `FixedDiv(dy,dx) >> DBITS` (5), unsigned
+    `(tantoangle + ANG90) >> 19`, and `FixedDiv(dx, finesine[index])`. For the
+    valid fixed domain the index lies 0..2048 and the cosine lies in
+    sine[2048..3072]; no floating `sqrt`, `Sin()` or `ATan2()` is used.
+  - `GeometryPointOnNodeSideChecked` and `GeometryPointOnSegSideChecked` share
+    the original node/seg fast-path body: vertical/horizontal `<=` boundaries,
+    direction-sign answers, XOR sign-bit shortcut, `FixedMul(lineDY>>16, dx)` /
+    `FixedMul(dy, lineDX>>16)` and back side 1 on an exact `right == left` tie.
+    The seg form derives `ldx=v2x-v1x`, `ldy=v2y-v1y` first, then uses v1 as the
+    origin, preserving endpoint order.
+- Provenance/generation:
+  - `scripts/gen_trig_tables.py` is a one-time developer-only generator, not a
+    build/test dependency. It reads the local pinned `tables.c` (no absolute
+    repository path), validates count/first/last and hashes against the pinned
+    reference, and emits only numeric `Data.l` values plus license/provenance
+    text into tracked `TrigTablesData.pbi`.
+  - `scripts/gen_geometry_golden.py` uses a separate Python integer oracle over
+    that pinned source and emits only numeric expectations into tracked
+    `tests/fixtures/m3_geometry_golden.pbi`. Both generated files build from an
+    ordinary checkout without the original C tree.
+
+Independent verification of the pinned tables (computed locally from the actual
+checkout, not copied from an agent assumption):
+
+| Array | Count | First | Last | Full LE32 FNV-1a64 |
+|---|---|---|---|---|
+| `finetangent` | 4096 | -170910304 | 170910304 | `6E300CFD277525E1` |
+| `finesine` | 10240 | 25 | 65535 | `ADD266F0CB7B06B6` |
+| `tantoangle` | 2049 | 0 | 536870912 | `56213612F87A0F4A` |
+
+The three generated table hashes match exactly. The PureBasic runtime recomputes
+all three whole-array hashes from the DataSection values (tests AG12-AG14), and
+the separate Python extraction/oracle produced the same counts, endpoints and
+hashes. `finesine[0]` is historically 25 and `finesine[4096]` -25; these rounding
+oddities are preserved rather than "corrected" to 0.
+
+Verified PureBasic 6.41 semantics from disposable compile-only probes before
+production code:
+
+- Hex constants `$80000000`, `$C0000000`, `$FFFFFFFF` are Quad literals in this
+  context: raw values 2147483648, 3221225472, 4294967295 and nonnegative.
+- `Data.l` stores 32-bit signed values; `Data.q`/`PeekQ` stores/reads 64-bit
+  values; a `DataSection` label address via `?Label` is usable as a plain pointer
+  (`Global *p = ?Label`); native-type suffixes on pointer parameters are rejected
+  (`.Quad` invalid), so raw-Quad output uses `BamAngleValue` structure access.
+- Bitwise `!` is XOR on Quads; `& $80000000` tests bit 31; `>>` on a nonnegative
+  Quad is the required logical shift for unsigned angle indexing.
+- Assigning an expression to an existing variable via a type suffix creates a
+  "different type" declaration error; all rare `.q -> .l` narrowing is written
+  as its own `.l` protected variable only after a proven in-domain check.
+
+Numerical results cross-checked against the independent oracle:
+
+- `SlopeDiv`: den 0/511 -> 2048 guard; 0/512 -> 0; 256/512 -> 1024;
+  511/512 -> 2044 and 512/512 -> 2048 cap boundary; 65535/65536 -> 2047 and
+  65536/65536 -> 2048; 100000/512 -> 2048; 1000/12345 -> 166 (the alternative
+  `(num*2048)/den` formula would incorrectly give 165); 0xFFFFFFFF/0xFFFFFFFF
+  -> exact unsigned 256; `1073741824<<3` and `0xFFFFFFFF<<3` reproduce C's
+  low-32 shift wrap (0 and 4294967288 respectively). 100 documented-seed pairs
+  match a separate test-only division oracle and repeat their checksum.
+- `R_PointToAngle*`: coincident -> 0; +X -> 0; +Y -> `0x3FFFFFFF` (ANG90-1);
+  -X -> `0x7FFFFFFF` (ANG180-1); -Y -> `0xC0000000` (ANG270);
+  +/+ tie -> `0x1FFFFFFF` (ANG45-1); +/- -> `0xE0000000`; -/+ -> `0x60000000`;
+  -/- -> `0x9FFFFFFF`; one-LSB perturbations move exactly between those branch
+  boundaries; nonzero view vectors match the pure four-coordinate wrapper.
+- `R_PointToDist`: +X/+Y/-X/-Y axis at 65536 -> 65537 (the historical cosine
+  65535 vs numerator quotient); four 45-degree diagonals -> 92717; 65536/32768
+  and swapped -> 73271; fractional 1/1 -> 1, 3/1 ->3 and 1/3 ->3; negative
+  quadrant -> 679962; nonzero views -> 400006/185435; large vectors under the
+  conservative guard -> 2147483647 (saturation), reproduces exactly.
+- Point-on-side: vertical +dy boundary -> back 1, vertical -dy boundary -> front
+  0 because of the direction sign; horizontal positive/negative dx orientations
+  match the original sign answers; non-axis exact-on-line tie -> back 1;
+  one-LSB above/below lines -> front/back as the fixed products dictate;
+  30 fixture vectors evaluated through both node and seg wrappers.
+
+Safety differences from the original (documented, not silent approximations):
+
+- C `x - viewx`/`y - viewy` signed overflow, `-x` of INT32_MIN, `abs(INT32_MIN)`,
+  and signed left shifts are C undefined behavior. DoomPB computes deltas in
+  widened `.q`, **rejects** deltas outside `[-2147483648,2147483647]` with a
+  diagnostic and an untouched output. A delta exactly INT32_MIN is supported by
+  using its nonnegative unsigned magnitude 2147483648 for octant comparison and
+  `SlopeDiv`; for distance that magnitude uses an explicit widened replica of
+  FixedDiv's guard/formula (signs are necessarily nonnegative there). This is a
+  defined policy where C has no defined reference; ordinary fixed-domain vectors
+  still call the accepted M3-01 `FixedDiv` unchanged.
+- Identical point in `R_PointToDist` would read a hugely out-of-domain
+  `tantoangle` index after `FixedDiv(0,0) -> MAX` and `>>5`. DoomPB returns fixed
+  distance **0** with success and no table access. AG38/I01 lock this policy.
+- `SlopeDiv` never receives signed values in Doom's legitimate callers; the
+  checked API rejects negative/oversized Quad input instead of performing C
+  unsigned conversion silently, while exact unsigned values remain accepted.
+- Every table index is checked before `Peek`; invalid accesses return `#False`
+  with an unchanged output and `TrigLastError()`. The original trusts indexes.
+- `R_PointToAngle2`'s global `viewx/viewy` mutation is intentionally not ported;
+  see the explicit-origin wrapper above. No renderer-global angle state exists.
+- The tables are immutable generated DataSection data, not a runtime floating
+  generator, a DLL, downloaded JSON, or mutable heap arrays. No table setup
+  occurs per call; generator scripts are not executed at build/runtime.
+
+Intentional limits of M3-02: no BSP tree traversal (`R_RenderBSPNode`),
+`R_CheckBBox`, wall/texture projection, `R_InitTextureMapping`, viewangletox,
+xtoviewangle, FOV/lighting tables, visible columns, camera, gameplay or
+collision port. These remain M3-03 onward.
+
+Verified behaviour (Windows x64, PureBasic 6.41):
+
+- `tests/unit/angle_geometry_tests.pb`: AG01-AG48, 48 cases / 277 assertions,
+  0 failures; full table hashes, table samples, cosine alias, SlopeDiv, octant
+  vectors, distances, node/seg sides, synthetic map bridge and error/repeat
+  cases all pass.
+- `tests/integration/m3_geometry_tests.pb`: I01-I03, 3 cases / 40 assertions,
+  0 failures; module composition without WAD/map/video, stable DataSection
+  tables, synthetic map conversion and a 15-operation snapshot hash
+  `4CFC5269DCED92AB` that repeats after intentional failures and clears errors.
+- `tests/integration/m3_geometry_iwad_tests.pb` without a path: I04 **NOT RUN**,
+  exit 0. With the owner's local Ultimate Doom 1.9ud (`data/DOOM.WAD`,
+  read-only): 1 case / 29 assertions / 0 failures; E1M1/E1M2/E4M1 load through
+  the existing M2 API. Sampled counts and canonical geometry checksums:
+  - E1M1: 470 vertexes / 238 nodes; sampled 32 vertexes / 17 nodes; 132 converted
+    fields; 51 side calls (31 front/20 back) / 4 angles / 4 distances; failures 0;
+    FNV-1a64 `0DCDBF94926A3A32` (printed `Hex()` omits the leading zero).
+  - E1M2: 942 / 447; sampled 61 / 30; 242 converted; 90 sides (50/40), 4 angles,
+    4 distances; failures 0; `A0CE3E0A0142A80E`.
+  - E4M1: 439 / 195; sampled 30 / 15; 120 converted; 45 sides (15/30), 4 angles,
+    4 distances; failures 0; `B7D9E25BCA4CF7B5`.
+  Repeated loads produce identical hashes and counts. No coordinates, raw arrays,
+  full maps, graphics or WAD bytes are printed or stored.
+- `scripts/test.ps1`: observed 86/86 checks pass. All prior M0/M1/M2/M3-01
+  regression executables rerun green: observed synthetic totals 464 cases /
+  2,704 assertions / 0 failures (prior 413/2,387 plus M3-02 48/277 and 3/40).
+  Separate optional read-only owner-IWAD runs add M2 integration 36/240,
+  M3-01 FI04 1/32 and M3-02 I04 1/29 (combined observed 467 cases / 2,784
+  assertions).
+- M3-01 original conversion checksums remain identical (E1M1
+  `2F223DE65E071C67`, E1M2 `9EAE6406696A7858`, E4M1 `BF869A8E7D528B9A`).
+- CLI regression `DoomPB 0.2.0`: `--version`, `--help`, `--dump-info`,
+  `--lump-info PLAYPAL`, `--map-info E1M1/E1M2/E4M1` all exit 0 with existing
+  metadata; `--show-title` against the local IWAD opens
+  `DoomPB - TITLEPIC (M1-04)`, 960x600 client area, closes through WM_CLOSE and
+  exits 0.
+- Windows compiler: `PureBasic 6.41 (Windows - x64) - (c)2026 Fantaisie
+  Software`. Linux compiler/runtime: **NOT RUN**. `bash -n` for `build.sh` and
+  `test.sh` passed in Git Bash as shell syntax only, not Linux validation.
+- Documentation lookup: Context7 was attempted. Resolved PureBasic entry
+  `/websites/purebasic`; a focused query returned official-doc-derived snippets
+  for signed `>>` (arithmetic, sign-preserving) and `DataSection`/`Data.l` type
+  declarations. PureBasic 6.41 help/local compiler probes verified the more
+  unusual `?label`, `Data.q`, XOR and Quad pointer constraints. C `tables.c`/
+  `r_main.c` remain authoritative for Doom numbers; Context7 was not used to
+  override engine semantics.
 
 ## Compatibility conventions adopted so far
 

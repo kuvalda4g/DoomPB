@@ -6,7 +6,9 @@
 # header/directory, lump lookup/payload, PLAYPAL/patch, framebuffer/presentation,
 # COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definition, composite wall-texture,
 # flat/sprite namespace, vanilla map binary and map loader/validation unit
-# tests, M2 end-to-end resource/map integration tests, and smoke tests
+# tests, M2 end-to-end resource/map integration tests, M3-01 fixed-point tests
+# and optional IWAD harness, M3-02 BAM angle/exact-table/geometry tests with
+# synthetic and optional IWAD integration, and smoke tests
 # against the produced executable: --version, --help, no-argument startup,
 # unknown-option handling, --lump-info argument validation and nonblocking
 # --show-title failures. No commercial game data and no display are needed.
@@ -33,6 +35,9 @@ MAP_LOADER_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadMapLoaderTests"
 INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M2IntegrationTests"
 FIXED_TEST_BIN="${REPO_ROOT}/build/DoomPB-FixedMathTests"
 FIXED_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3FixedIwadTests"
+GEOMETRY_TEST_BIN="${REPO_ROOT}/build/DoomPB-AngleGeometryTests"
+GEOMETRY_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3GeometryTests"
+GEOMETRY_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3GeometryIwadTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -640,6 +645,147 @@ if printf '%s\n' "${fixed_iwad_output}" | grep -Eq -- 'NOT RUN'; then
 else
     printf 'FAIL: optional IWAD fixed-point tests did not report NOT RUN\n%s\n' \
         "${fixed_iwad_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-02 angle/geometry unit test build ==\n'
+run_build --check --geometry-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-02 angle/geometry test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-02 angle/geometry test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-02 angle/geometry test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --geometry-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-02 angle/geometry test build exits with 0\n'
+else
+    printf 'FAIL: M3-02 angle/geometry test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-02 angle/geometry test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${GEOMETRY_TEST_BIN}" ]; then
+    printf 'PASS: M3-02 angle/geometry test output exists: %s\n' "${GEOMETRY_TEST_BIN}"
+else
+    printf 'FAIL: M3-02 angle/geometry test output missing: %s\n' "${GEOMETRY_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-02 angle/geometry test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-02 angle/geometry unit tests ==\n'
+"${GEOMETRY_TEST_BIN}"
+geometry_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${geometry_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-02 angle/geometry tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-02 angle/geometry tests exit with %s\n' "${geometry_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-02 synthetic geometry integration test build ==\n'
+run_build --check --geometry-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-02 synthetic geometry integration test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-02 synthetic geometry integration test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-02 synthetic geometry integration test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --geometry-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-02 synthetic geometry integration test build exits with 0\n'
+else
+    printf 'FAIL: M3-02 synthetic geometry integration test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-02 synthetic geometry integration test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${GEOMETRY_INTEGRATION_TEST_BIN}" ]; then
+    printf 'PASS: M3-02 synthetic geometry integration test output exists: %s\n' "${GEOMETRY_INTEGRATION_TEST_BIN}"
+else
+    printf 'FAIL: M3-02 synthetic geometry integration test output missing: %s\n' "${GEOMETRY_INTEGRATION_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-02 synthetic geometry integration test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-02 synthetic geometry integration tests ==\n'
+"${GEOMETRY_INTEGRATION_TEST_BIN}"
+geometry_integration_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${geometry_integration_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-02 geometry integration tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-02 geometry integration tests exit with %s\n' "${geometry_integration_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-02 optional IWAD angle/geometry test build ==\n'
+run_build --check --geometry-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-02 optional IWAD geometry test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-02 optional IWAD geometry test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-02 optional IWAD geometry test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --geometry-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-02 optional IWAD geometry test build exits with 0\n'
+else
+    printf 'FAIL: M3-02 optional IWAD geometry test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-02 optional IWAD geometry test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${GEOMETRY_IWAD_TEST_BIN}" ]; then
+    printf 'PASS: M3-02 optional IWAD geometry test output exists: %s\n' "${GEOMETRY_IWAD_TEST_BIN}"
+else
+    printf 'FAIL: M3-02 optional IWAD geometry test output missing: %s\n' "${GEOMETRY_IWAD_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-02 optional IWAD geometry test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-02 optional IWAD angle/geometry tests (no local path) ==\n'
+geometry_iwad_output="$("${GEOMETRY_IWAD_TEST_BIN}" 2>&1)"
+geometry_iwad_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${geometry_iwad_status}" -eq 0 ]; then
+    printf 'PASS: optional IWAD geometry tests exit with 0 without a WAD path\n'
+else
+    printf 'FAIL: optional IWAD geometry tests exit with %s\n' "${geometry_iwad_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${geometry_iwad_output}" | grep -Eq -- 'NOT RUN'; then
+    printf 'PASS: optional IWAD geometry tests report NOT RUN without a path\n'
+else
+    printf 'FAIL: optional IWAD geometry tests did not report NOT RUN\n%s\n' \
+        "${geometry_iwad_output}" >&2
     FAILURES=$((FAILURES + 1))
 fi
 

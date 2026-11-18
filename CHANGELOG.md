@@ -3,10 +3,11 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
-## [Unreleased] - M3-01 fixed-point math foundation
+## [Unreleased] - M3 math, BAM angle and geometry foundation
 
 M3 is not complete; the application version remains `0.2.0`. No tag or release
-is created for this increment.
+is created for this increment. M3-01 and M3-02 modules/tests are in the working
+tree; BSP traversal and wall rendering remain M3-03 onward.
 
 ### Added
 
@@ -24,13 +25,55 @@ is created for this increment.
   `--fixed-iwad-test`; both test runners execute the new suites.
 - `DoomPB.pb` includes the math module without changing CLI or gameplay logic.
 
+- `src/Core/Angle.pbi`: raw unsigned 32-bit BAM constants, modulo-2^32
+  add/subtract/negate, fine-index `(raw>>19)&8191`, signed-bit transport
+  documentation and a Quad angle result carrier for `ANG180`/`ANG270`.
+- `src/Core/TrigTables.pbi` + generated `TrigTablesData.pbi`: exact pinned
+  `finetangent` (4096), `finesine` (10240) and `tantoangle` (2049) values in an
+  immutable DataSection, validated indexes, the original cosine sine-offset
+  alias and checked `DoomSlopeDivChecked` with unsigned shift-before-division
+  semantics.
+- `src/Renderer/Geometry.pbi`: checked equivalent primitives for
+  `R_PointToAngle`/`R_PointToAngle2`, `R_PointToDist`, `R_PointOnSide` and
+  `R_PointOnSegSide`; explicit origins, unsigned BAM branches, original fixed
+  products/sign shortcut/tie rules and documented overflow/coincident policies.
+- Developer-only generators `scripts/gen_trig_tables.py` and
+  `scripts/gen_geometry_golden.py`; tracked numeric table data and generated
+  golden fixture, buildable without the local C tree at build/runtime.
+- `tests/unit/angle_geometry_tests.pb`: AG01-AG48 (48 cases, 277 assertions)
+  covering BAM constants/wrap/indexing, whole-table shape/samples/full hashes,
+  cosine alias, SlopeDiv edge/oracle cases, all eight angle octants, distances,
+  node/seg sides, synthetic map bridge and error/repeat stability.
+- `tests/integration/m3_geometry_tests.pb`: I01-I03 (3 cases, 40 assertions)
+  covering dependency-free composition, stable immutable tables, synthetic map
+  conversions and a 15-operation deterministic snapshot.
+- `tests/integration/m3_geometry_iwad_tests.pb`: optional read-only I04 for
+  E1M1/E1M2/E4M1 sample counts and non-reconstructable canonical geometry
+  checksums.
+- `-GeometryTest`, `-GeometryIntegrationTest`, `-GeometryIwadTest` PowerShell
+  targets and `--geometry-test`, `--geometry-integration-test`,
+  `--geometry-iwad-test` Bash targets; both test runners execute the new suites.
+
 ### Verified
 
 - Windows x64, PureBasic 6.41: fixed math suite 43 cases / 318 assertions / 0
   failures; optional FI04 with the owner's local IWAD 1 case / 32 assertions / 0
-  failures. `scripts/test.ps1` passes 73/73 checks; all existing M0/M1/M2 suites
-  remain green, and `--version` (`DoomPB 0.2.0`), `--show-title` and `--map-info`
-  remain unaffected. Linux x64 NOT RUN.
+  failures.
+- M3-02 angle/geometry suite 48 cases / 277 assertions / 0 failures; synthetic
+  integration I01-I03 3 cases / 40 assertions / 0 failures; optional owner-IWAD
+  I04 1 case / 29 assertions / 0 failures for E1M1/E1M2/E4M1.
+- Pinned table verification: `finetangent` 4096 / `6E300CFD277525E1`,
+  `finesine` 10240 / `ADD266F0CB7B06B6`, `tantoangle` 2049 /
+  `56213612F87A0F4A`; runtime DataSection whole-array hashes match, and a separate
+  Python oracle over the pinned source confirms table samples and algorithm
+  vectors.
+- Owner IWAD canonical geometry checksums: E1M1 `0DCDBF94926A3A32`, E1M2
+  `A0CE3E0A0142A80E`, E4M1 `B7D9E25BCA4CF7B5`; repeated loads identical.
+- `scripts/test.ps1`: observed 86/86 checks; all prior M0/M1/M2/M3-01 suites
+  rerun green (464 synthetic cases / 2,704 assertions); owner-IWAD runs M2
+  integration 36/240, M3-01 FI04 1/32 and M3-02 I04 1/29. `--version` prints
+  `DoomPB 0.2.0`, `--help`, `--dump-info`, `--lump-info`, `--map-info` and
+  `--show-title` remain available. Linux x64 NOT RUN.
 
 ## [0.2.0] - 2026-11-16
 
