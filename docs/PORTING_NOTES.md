@@ -10,6 +10,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
 | M2 - Resources and map loading | complete on Windows x64; `v0.2.0` prepared | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`, M2-05 as `2fb2481`, M2-06 as `2f170c1`; M2-07 integration/version changes are in the working tree pending owner commit/tag; renderer pending; Linux x64 NOT RUN |
+| M3 - Geometry and first walls | in progress: M3-01 only | signed 16.16 math module and tests implemented in the working tree; angles/tables, geometry, BSP and rendering remain M3-02 onward; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -875,6 +876,158 @@ Intentional differences and limits at 0.2.0:
 - `F_SKY1` is treated as a normal flat name for binding; sky rendering is M4.
 - Linux x64 build/runtime is **NOT RUN**. `bash -n` is not treated as Linux
   validation.
+
+## M3-01 — fixed-point 16.16 arithmetic
+
+Original C symbols consulted (same pinned revision):
+
+- `m_fixed.h`: `FRACBITS 16`, `FRACUNIT (1 << FRACBITS)`, `typedef int fixed_t`
+  (signed 32-bit, 16.16 interpretation), declarations of `FixedMul`, `FixedDiv`
+  and `FixedDiv2`.
+- `m_fixed.c`:
+  - `FixedMul`: `return ((long long)a * (long long)b) >> FRACBITS;`
+  - `FixedDiv`: early guard `if ((abs(a)>>14) >= abs(b)) return (a^b)<0 ?
+    MININT : MAXINT; return FixedDiv2(a, b);`
+  - `FixedDiv2`: active implementation is the `double` form
+    `c = ((double)a)/((double)b)*FRACUNIT;` with `I_Error` when
+    `c >= 2147483648.0 || c < -2147483648.0`, then a `fixed_t` cast. The `#if 0`
+    integer shift form is inactive.
+- Consumers inspected only as context: `p_maputl.c` (`FixedDiv(num,den)`,
+  `FixedMul` slope/intercept, `abs`), `r_main.c`
+  (`FixedDiv(dy,dx)>>DBITS`, `scale = FixedDiv(projection,z)`) and `r_segs.c`
+  (`FixedDiv`, `FixedMul` projections).
+- Map-unit conversions in `p_setup.c`: `vertex->x = SHORT(..)<<FRACBITS`,
+  `sector floorheight/ceilingheight = SHORT(..)<<FRACBITS`, node bbox and seg
+  angle/offset `<<16`. The M2 decoders store those C SHORT fields as signed
+  `.l` map-unit integers; conversion is M3-01 work.
+
+Port mapping (`src/Core/Fixed.pbi`):
+
+- `fixed_t` → `.l` signed 32-bit; `#FRACBITS/#FRACUNIT/#FIXED_MIN/#FIXED_MAX`.
+- `FixedMul` → `FixedMul(A.l, B.l)`.
+- `FixedDiv` → `FixedDiv(A.l, B.l)`.
+- `FixedDiv2` → **checked** `FixedDiv2Checked(A.l, B.l, *Result.Long)`; no
+  unchecked fatal API exists.
+- `SHORT(..)<<FRACBITS` integer conversion → `FixedFromIntChecked(Value.q,
+  *Result.Long)`.
+- Renderer integer extraction → `FixedToIntFloor(Value.l)` (arithmetic `>>16`).
+- Optional diagnostic → `FixedToIntTrunc(Value.l)`, explicitly truncation toward
+  zero, never a substitute for the original shift.
+- Explicit narrow policy → `FixedWrap32Low(Value.q)`.
+- Diagnostics → `FixedLastError()`.
+
+Verified PureBasic 6.41 integer semantics from disposable compiler probes:
+
+- Assigning a `.l` pair product to a `.q` destination evaluates the product in
+  64-bit exactly; production still widens each operand explicitly.
+- `>>` on signed `.q`/`.l` is an **arithmetic** shift: the sign bit is preserved,
+  `-1 >>16 = -1`, `-65537 >>16 = -2`.
+- `/` truncates toward zero: `-65537 / 65536 = -1`, `65536 / -3 = -21845`.
+- `%` returns a remainder with the dividend's sign: `-65537 % 65536 = -1`.
+- Assignment of an out-of-range `.q` to `.l` truncates the low 32 bits
+  (`$100000000 → 0`, `-140737488355328 → 0`), but production does not rely on
+  this: `FixedWrap32Low` masks `$FFFFFFFF` and reinterprets `$80000000..` with
+  two's-complement sign semantics.
+- Assignment of a `double` to `.l` **rounds** (`-65535.99997 → -65536`);
+  `Int()` truncates toward zero (`-65535.99997 → -65535`, `-123.75 → -123`).
+  `Int()` is used only in the test-only double oracle, never in production.
+
+Semantics implemented:
+
+- `FixedMul`: both operands widened to signed `.q`; product exact; arithmetic
+  `>> FRACBITS` reproduces C flooring of a negative quotient (not truncation);
+  out-of-range 32-bit floor is explicit low-32 two's-complement wrap. Golden:
+  `1×-1=-1`, `-1×-1=0`, `32768×-32768=-16384`, `65536×65536=65536`,
+  `INT32_MAX×INT32_MAX=-65536`, `INT32_MIN×INT32_MIN=0`,
+  `INT32_MIN×FRACUNIT=INT32_MIN`, `INT32_MAX×65537=-2147450882` (low bits
+  `80007FFE`), `INT32_MIN×65537=2147450880` (low bits `7FFF8000`).
+- `FixedDiv`: magnitudes made nonnegative using widened `.q` negation, avoiding
+  C's undefined `abs(INT_MIN)`; guard `(magnitudeA >> 14) >= magnitudeB`
+  evaluated before any quotient; sign mismatch exactly
+  `(A ! B) < 0` chooses `#FIXED_MIN`, otherwise `#FIXED_MAX`. Zero denominator
+  is always guard-true. Outside the guard, the exact integer quotient
+  `(A*FRACUNIT)/B` truncates toward zero and stays inside signed32.
+  Golden: `65536/65536=65536`, `65536/32768=131072`, `1/3=21845`, `1/-3=-21845`,
+  `16383/1=1073676288`, `16384/1=2147483647` (early conservative saturation
+  although the true quotient 1073741824 fits), `-16384/1=INT32_MIN`,
+  `0/0=INT32_MAX`, `123/0=INT32_MAX`, `-123/0=INT32_MIN`,
+  `INT32_MIN/1=INT32_MIN`, `INT32_MIN/INT32_MIN=65536`.
+- `FixedDiv2Checked`: b=0 → `#False`; null output → `#False`; quotient
+  `> #FIXED_MAX` or `< #FIXED_MIN` → `#False` (the original calls `I_Error` in the
+  corresponding active-double condition). On failure `*Result` is untouched; on
+  success the result is written and `FixedLastError()` is cleared. The exact
+  signed32 minimum `-2147483648` is **valid** (`-32768/1` accepted). Parity of
+  the integer quotient/predicate with the active `double` formula and `Int()`
+  truncation is checked over explicit boundaries and 10,000 deterministic
+  inputs; no mismatch was observed.
+- FixedDiv non-guard versus active `double`: the guard restricts the quotient
+  magnitude below ~2^30, and the minimum distance of a rational result to an
+  integer boundary (`1/|b|` in quotient units) is larger than the double ULP at
+  that magnitude (`~2^-6/|b|`); truncation cannot change the integer result, so
+  the exact integer path matches the original for all in-range pairs. Differential
+  tests confirm this empirically.
+- `FixedFromIntChecked`: bounded input `[-32768, 32767]` before multiplying, so
+  huge Quad inputs cannot overflow the `.q` product; `Value*65536` in `.q` then
+  post-checked `#FIXED_MIN.. #FIXED_MAX`; `-32768` succeeds to `-2147483648`,
+  `+32767` succeeds to `2147418112`, `+32768`/`-32769` fail with result intact.
+- `FixedToIntFloor` uses arithmetic `>>16`: `-1→-1`, `-65537→-2`.
+  `FixedToIntTrunc` uses `/`: `-1→0`, `-65537→-1`, `-32768→0`.
+
+Intentional differences from original Doom (all safety choices):
+
+- C `abs(INT_MIN)` UB and the signed-left-shift UB in the inactive `FixedDiv2`
+  form are never used. Widened magnitudes and multiplication are defined.
+- C's implementation-defined narrowing of an out-of-range `long long` to `int`
+  in `FixedMul` is replaced by the explicit low-32 two's-complement wrap needed by
+  the target Doom implementation. `FixedMul` still does not saturate.
+- The active C `FixedDiv2` uses `double` and `I_Error`; DoomPB exports only a
+  checked integer-equivalent helper that reports failure safely and leaves the
+  caller's result unchanged. The integer path was verified against the double
+  predicate/truncation, including parity reasoning above.
+- The C code divides with zero denominators only after the FixedDiv guard; the
+  checked helper explicitly rejects direct b=0 before division.
+- Conversion validates the wide input before the 64-bit multiply; the C loader
+  only ever receives signed SHORT fields.
+- This module adds no trigonometry, angle tables, geometry, BSP, renderer,
+  gameplay or platform dependency. Those remain M3-02/M3 onward.
+
+Verified behaviour (Windows x64, PureBasic 6.41):
+
+- `tests/unit/fixed_math_tests.pb`: 43 cases, 318 assertions, 0 failures
+  (FM01–FM40 plus FI01–FI03). Includes the exhaustive pair set `[-32,32]` (4,225
+  operations) against a division/remainder floor oracle, and 10,000 deterministic
+  division inputs with documented seed `0x12345678` plus mandatory boundary,
+  threshold, sign-crossing and zero-denominator vectors against an independent
+  guarded oracle and the active double predicate/truncation.
+- `tests/integration/m3_fixed_iwad_tests.pb` without a path: FI04 **NOT RUN**,
+  exit 0. With the owner's local Ultimate Doom 1.9ud (read-only `data/DOOM.WAD`):
+  1 case, 32 assertions, 0 failures; all vertex/sector fields of E1M1, E1M2 and
+  E4M1 converted successfully and repeated identically. Measured canonical
+  converted-value FNV-1a64 checksums: E1M1 `2F223DE65E071C67`, E1M2
+  `9EAE6406696A7858`, E4M1 `BF869A8E7D528B9A`. Counts printed were
+  E1M1 470 vertexes / 88 sectors / 1,116 converted fields; E1M2 942 / 200 / 2,284;
+  E4M1 439 / 81 / 1,040. No coordinate lists, level tables or payload bytes are
+  printed, stored or committed.
+- `src/Core/Fixed.pbi` compiles standalone (`pbcompiler --check` exit 0) and in
+  `src/DoomPB.pb`; the application remains version `0.2.0`.
+- `scripts/test.ps1` on Windows x64, PureBasic 6.41: 73/73 checks passed.
+  Without a WAD argument, all previous M0/M1/M2 suites remain green at their
+  existing totals (M1 header/lump/graphics/display 17/146, 21/152, 34/197,
+  24/199; M2 resources/texture-def/composite/flat-sprite/map-types/map-loader/
+  integration 31/191, 33/165, 30/141, 39/300, 51/190, 55/167, 35/221; M2 I04
+  NOT RUN), plus the new M3 suite 43/318 and the optional M3 FI04 harness 0/0
+  (NOT RUN). That is 413 synthetic cases / 2,387 assertions with 0 failures.
+  Separate read-only owner-IWAD runs: M2 integration 36/240 (0 failures) and
+  M3 FI04 1/32 (0 failures); with those optional cases the combined observed
+  figures are 415 cases / 2,438 assertions.
+- CLI regression: `--version` prints `DoomPB 0.2.0`; `--map-info` for E1M1,
+  E1M2 and E4M1 exits 0 with the existing metadata; `--show-title` was opened
+  programmatically against the local IWAD: window title
+  `DoomPB - TITLEPIC (M1-04)`, 960x600 client area, WM_CLOSE exit 0.
+
+Milestone status note: M3-01 implements the math foundation only. M3 as a whole
+(angles/tables, geometry, BSP, wall rendering, v0.3.0) is **not** complete and no
+`v0.3.0` tag/release exists.
 
 ## Compatibility conventions adopted so far
 

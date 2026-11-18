@@ -43,6 +43,8 @@ $flatSpriteTestExe = Join-Path $repoRoot 'build\DoomPB-WadFlatSpriteTests.exe'
 $mapTypesTestExe = Join-Path $repoRoot 'build\DoomPB-WadMapTypesTests.exe'
 $mapLoaderTestExe = Join-Path $repoRoot 'build\DoomPB-WadMapLoaderTests.exe'
 $integrationTestExe = Join-Path $repoRoot 'build\DoomPB-M2IntegrationTests.exe'
+$fixedTestExe = Join-Path $repoRoot 'build\DoomPB-FixedMathTests.exe'
+$fixedIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3FixedIwadTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -62,11 +64,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -277,6 +279,43 @@ Write-Host '== WAD map loader/validation unit tests =='
 & $mapLoaderTestExe
 $status = $LASTEXITCODE
 Test-Condition ($status -eq 0) "synthetic WAD map loader tests exit with 0 (got $status)"
+
+Write-Host ''
+Write-Host '== M3-01 fixed-point math test build =='
+$status = Invoke-BuildStep -Check -FixedTest
+Test-Condition ($status -eq 0) "M3 fixed-point test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -FixedTest
+Test-Condition ($status -eq 0) "M3 fixed-point test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $fixedTestExe -PathType Leaf) "M3 fixed-point test output exists: $fixedTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $fixedTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3 fixed-point test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-01 fixed-point math unit tests =='
+& $fixedTestExe
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M3 fixed-point tests exit with 0 (got $status)"
+
+Write-Host ''
+Write-Host '== M3-01 optional IWAD fixed-point test build =='
+$status = Invoke-BuildStep -Check -FixedIwadTest
+Test-Condition ($status -eq 0) "M3 optional IWAD fixed-point test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -FixedIwadTest
+Test-Condition ($status -eq 0) "M3 optional IWAD fixed-point test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $fixedIwadTestExe -PathType Leaf) "M3 optional IWAD fixed-point test output exists: $fixedIwadTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $fixedIwadTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3 optional IWAD fixed-point test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-01 optional IWAD fixed-point tests (no local path) =='
+$fixedIwadOutput = & $fixedIwadTestExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "optional IWAD fixed-point tests exit with 0 without a WAD path (got $status)"
+Test-Condition ($fixedIwadOutput -match 'NOT RUN') "optional IWAD fixed-point tests report NOT RUN without a path"
 
 Write-Host ''
 Write-Host '== M2 end-to-end integration test build =='

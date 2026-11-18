@@ -58,6 +58,14 @@
     Build the M2 end-to-end resource/map integration test program
     (tests/integration/m2_release_tests.pb) instead of the main executable.
 
+.PARAMETER FixedTest
+    Build the M3-01 fixed-point math unit test program
+    (tests/unit/fixed_math_tests.pb) instead of the main executable.
+
+.PARAMETER FixedIwadTest
+    Build the optional M3-01 real-IWAD fixed-point integration test program
+    (tests/integration/m3_fixed_iwad_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -97,6 +105,12 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -IntegrationTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -FixedTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -FixedIwadTest
 #>
 [CmdletBinding()]
 param(
@@ -112,6 +126,8 @@ param(
     [switch]$MapTypesTest,
     [switch]$MapLoaderTest,
     [switch]$IntegrationTest,
+    [switch]$FixedTest,
+    [switch]$FixedIwadTest,
     [string]$CompilerPath = ''
 )
 
@@ -133,12 +149,20 @@ if ($FlatSpriteTest) { $selectedTargets++ }
 if ($MapTypesTest) { $selectedTargets++ }
 if ($MapLoaderTest) { $selectedTargets++ }
 if ($IntegrationTest) { $selectedTargets++ }
+if ($FixedTest) { $selectedTargets++ }
+if ($FixedIwadTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($IntegrationTest) {
+if ($FixedIwadTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_fixed_iwad_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3FixedIwadTests.exe'
+} elseif ($FixedTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\fixed_math_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-FixedMathTests.exe'
+} elseif ($IntegrationTest) {
     $sourceFile = Join-Path $repoRoot 'tests\integration\m2_release_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-M2IntegrationTests.exe'
 } elseif ($MapLoaderTest) {

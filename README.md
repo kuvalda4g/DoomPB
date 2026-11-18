@@ -12,8 +12,11 @@ ticks and WAD compatibility — rather than to reimagine it.
 > 960x600 window at 3x nearest-neighbour. M2 adds bounds-checked decoders for all
 > ten vanilla map lumps, a validated level loader with cross-reference/BSP/REJECT/
 > BLOCKMAP checks, and end-to-end resource binding of map flats and wall
-> textures. The world renderer and gameplay are still pending. Linux x64 runtime
-> is **NOT RUN**. No Git tag exists until the owner creates it.
+> textures. The M3-01 signed 16.16 fixed-point math module and its tests are
+> implemented in the working tree; M3's angles, geometry and wall rendering are
+> not complete. The world renderer and gameplay are still pending. The
+> application version remains `0.2.0`. Linux x64 runtime is **NOT RUN**. No Git
+> tag exists until the owner creates it.
 
 ## Legal notice
 

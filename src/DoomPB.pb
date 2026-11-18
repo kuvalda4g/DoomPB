@@ -11,6 +11,7 @@
 EnableExplicit
 
 XIncludeFile "Core/Endian.pbi"
+XIncludeFile "Core/Fixed.pbi"
 XIncludeFile "WAD/WAD.pbi"
 XIncludeFile "Graphics/Palette.pbi"
 XIncludeFile "Graphics/Patch.pbi"

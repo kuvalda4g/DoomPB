@@ -31,6 +31,8 @@ FLAT_SPRITE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadFlatSpriteTests"
 MAP_TYPES_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadMapTypesTests"
 MAP_LOADER_TEST_BIN="${REPO_ROOT}/build/DoomPB-WadMapLoaderTests"
 INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M2IntegrationTests"
+FIXED_TEST_BIN="${REPO_ROOT}/build/DoomPB-FixedMathTests"
+FIXED_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3FixedIwadTests"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -541,6 +543,103 @@ if [ "${map_loader_status}" -eq 0 ]; then
     printf 'PASS: synthetic WAD map loader tests exit with 0\n'
 else
     printf 'FAIL: synthetic WAD map loader tests exit with %s\n' "${map_loader_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-01 fixed-point math test build ==\n'
+run_build --check --fixed-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3 fixed-point test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3 fixed-point test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3 fixed-point test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --fixed-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3 fixed-point test build exits with 0\n'
+else
+    printf 'FAIL: M3 fixed-point test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3 fixed-point test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${FIXED_TEST_BIN}" ]; then
+    printf 'PASS: M3 fixed-point test output exists: %s\n' "${FIXED_TEST_BIN}"
+else
+    printf 'FAIL: M3 fixed-point test output missing: %s\n' "${FIXED_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3 fixed-point test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-01 fixed-point math unit tests ==\n'
+"${FIXED_TEST_BIN}"
+fixed_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${fixed_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3 fixed-point tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3 fixed-point tests exit with %s\n' "${fixed_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-01 optional IWAD fixed-point test build ==\n'
+run_build --check --fixed-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3 optional IWAD fixed-point test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3 optional IWAD fixed-point test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3 optional IWAD fixed-point test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --fixed-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3 optional IWAD fixed-point test build exits with 0\n'
+else
+    printf 'FAIL: M3 optional IWAD fixed-point test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3 optional IWAD fixed-point test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${FIXED_IWAD_TEST_BIN}" ]; then
+    printf 'PASS: M3 optional IWAD fixed-point test output exists: %s\n' "${FIXED_IWAD_TEST_BIN}"
+else
+    printf 'FAIL: M3 optional IWAD fixed-point test output missing: %s\n' "${FIXED_IWAD_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3 optional IWAD fixed-point test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-01 optional IWAD fixed-point tests (no local path) ==\n'
+fixed_iwad_output="$("${FIXED_IWAD_TEST_BIN}" 2>&1)"
+fixed_iwad_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${fixed_iwad_status}" -eq 0 ]; then
+    printf 'PASS: optional IWAD fixed-point tests exit with 0 without a WAD path\n'
+else
+    printf 'FAIL: optional IWAD fixed-point tests exit with %s\n' "${fixed_iwad_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${fixed_iwad_output}" | grep -Eq -- 'NOT RUN'; then
+    printf 'PASS: optional IWAD fixed-point tests report NOT RUN without a path\n'
+else
+    printf 'FAIL: optional IWAD fixed-point tests did not report NOT RUN\n%s\n' \
+        "${fixed_iwad_output}" >&2
     FAILURES=$((FAILURES + 1))
 fi
 

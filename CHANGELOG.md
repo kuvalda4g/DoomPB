@@ -3,6 +3,35 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
+## [Unreleased] - M3-01 fixed-point math foundation
+
+M3 is not complete; the application version remains `0.2.0`. No tag or release
+is created for this increment.
+
+### Added
+
+- `src/Core/Fixed.pbi`: dependency-free signed 16.16 arithmetic (`FixedMul`,
+  early-saturating `FixedDiv`, checked `FixedDiv2Checked`, checked integer/map
+  conversions, arithmetic floor extraction and explicit low-32 wrap) reproducing
+  Linux Doom 1.10 `m_fixed.c` observable behaviour without `I_Error` or C UB.
+- `tests/unit/fixed_math_tests.pb`: FM01–FM40 plus FI01–FI03 synthetic cases with
+  independent floor/guarded/double oracles, a fixed LCG seed and deterministic
+  repeatability (43 cases, 318 assertions).
+- `tests/integration/m3_fixed_iwad_tests.pb`: optional read-only FI04 bridge that
+  converts signed E1M1/E1M2/E4M1 vertex coordinates and sector heights to 16.16
+  and verifies reproducibility (REPORT ONLY / NOT RUN without a WAD path).
+- `-FixedTest` / `--fixed-test` build targets; optional `-FixedIwadTest` /
+  `--fixed-iwad-test`; both test runners execute the new suites.
+- `DoomPB.pb` includes the math module without changing CLI or gameplay logic.
+
+### Verified
+
+- Windows x64, PureBasic 6.41: fixed math suite 43 cases / 318 assertions / 0
+  failures; optional FI04 with the owner's local IWAD 1 case / 32 assertions / 0
+  failures. `scripts/test.ps1` passes 73/73 checks; all existing M0/M1/M2 suites
+  remain green, and `--version` (`DoomPB 0.2.0`), `--show-title` and `--map-info`
+  remain unaffected. Linux x64 NOT RUN.
+
 ## [0.2.0] - 2026-11-16
 
 Milestone M2 is complete for the Windows x64 single-IWAD goal. The application
