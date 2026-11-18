@@ -10,7 +10,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
 | M2 - Resources and map loading | complete on Windows x64; `v0.2.0` prepared | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`, M2-05 as `2fb2481`, M2-06 as `2f170c1`; M2-07 integration/version changes are in the working tree pending owner commit/tag; renderer pending; Linux x64 NOT RUN |
-| M3 - Geometry and first walls | in progress: M3-01 and M3-02 | signed 16.16 math (M3-01) and BAM angles/tables/geometry primitives (M3-02) implemented in the working tree; BSP traversal and wall rendering remain M3-03 onward; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
+| M3 - Geometry and first walls | in progress: M3-01, M3-02 and M3-03 | signed 16.16 math (M3-01), BAM angles/tables/geometry primitives (M3-02) and deterministic fixed-camera BSP traversal/trace (M3-03) implemented and tested in the working tree; screen projection, wall clipping/textured rendering and real `R_CheckBBox` occlusion remain later M3 steps; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -1240,6 +1240,198 @@ Verified behaviour (Windows x64, PureBasic 6.41):
   unusual `?label`, `Data.q`, XOR and Quad pointer constraints. C `tables.c`/
   `r_main.c` remain authoritative for Doom numbers; Context7 was not used to
   override engine semantics.
+
+## M3-03 — deterministic fixed-camera BSP traversal and trace
+
+Original C symbols consulted (same pinned revision
+`a77dfb96cb91780ca334d0d4cfd86957558007e0`, local `../doom-original/linuxdoom-1.10`):
+
+- `r_bsp.c`: `R_RenderBSPNode(int bspnum)`, `R_Subsector(int num)`,
+  `R_CheckBBox(fixed_t *bspcoord)`, `R_AddLine(seg_t *line)`,
+  `R_ClearClipSegs(void)`, `R_ClipSolidWallSegment`, `cliprange_t solidsegs[]`.
+- `r_main.c`: `R_PointOnSide`, `R_PointInSubsector` root convention
+  (`numnodes - 1`, zero-node `subsectors[0]`), `R_RenderPlayerView` calls
+  `R_RenderBSPNode (numnodes-1)`, and fixed `viewx/viewy` renderer globals.
+- `r_defs.h`: `node_t` fixed `x/y/dx/dy`, bbox order, children; `subsector_t`
+  `sector`, `numlines`, `firstline`; `seg_t` `v1/v2`, `angle`, `offset`,
+  `sidedef`, `linedef`, `frontsector`, `backsector`.
+- `doomdata.h`: `mapsubsector_t`, `mapsubsector_t.firstseg`, `mapnode_t`
+  unsigned `children[2]`, `NF_SUBSECTOR 0x8000`.
+- `tables.h`: `BAM` representation reused through the existing `Angle.pbi`.
+- `p_maputl.c`/`p_sight.c` `REJECT`/`BLOCKMAP` were inspected only to confirm they
+  are separate visibility/collision mechanisms and were not consulted by this
+  traversal.
+
+Port mapping:
+
+- `src/Renderer/Camera.pbi`:
+  - caller-owned `BspCamera` (`Magic`, `Ready`, `.l` fixed X/Y, `.q` raw Heading);
+  - `BspCameraSetMapUnits` converts signed C-SHORT map units through
+    `FixedFromIntChecked`; `BspCameraSetFixed` accepts signed32 fixed_t directly;
+  - `BspCameraReset/Get/LastError`; the header stores canonical raw unsigned BAM
+    `0..$FFFFFFFF` for `ANG180`/`ANG270`; setters are transactional.
+- `src/Renderer/BSP.pbi`:
+  - `R_RenderBSPNode` recursion replaced by an explicit LIFO stack of raw 16-bit
+    child values; push far child first then near child, so near subtree completes
+    first exactly like C recursion. Root comes from validated `MapLevelGetBspRoot`.
+  - `R_PointOnSide(viewx,viewy,node)` side selection reuses the already tested
+    `GeometryPointOnNodeSideChecked`, including vertical/horizontal `<=` ties,
+    XOR sign shortcut and `right == left` back-side tie.
+  - `R_Subsector` leaf work emits one `SUBSECTOR` event with the derived sector,
+    then one `SEG` event per canonical increasing
+    `firstseg..firstseg+numsegs-1`; resolved linedef, side, front and back sector
+    links come from the M2 validated accessors. Planes/sprites from `R_Subsector`
+    are deferred to M4.
+- `src/DoomPB.pb` includes Camera/BSP only for compile-time coverage; startup does
+  not load a map, create a camera or start graphics/traversal.
+
+Event schema and ownership:
+
+- `BspTrace` owns a deep-copied array of `BspEvent` records; it never retains a
+  `MapLevel`, stack or WAD pointer and remains readable after `MapLevelReset()` or
+  `WADClose()`.
+- `BSP_EventSubsector` (0): `Subsector`, `Sector` derived; `Seg`, `Linedef`, `Side`,
+  `FrontSector`, `BackSector` = documented `-1` sentinels.
+- `BSP_EventSeg` (1): `Subsector` owner leaf, absolute `Seg`, **`Sector` = owning
+  leaf's derived sector**, `Linedef`, `Side` (0/1), actual `FrontSector`, actual
+  `BackSector` (one-sided = `-1`). M3-04 consumers can fetch vertex/direction and
+  texture fields from the unchanged owned MapLevel using these stable indices.
+- `BspTraceBuild` resets the target trace first. Any null/unready input, root/child/
+  seg corruption, record-range failure, `FixedFromIntChecked`/geometry error,
+  stack/work/event budget exhaustion or OOM calls `BspTraceReset` and preserves
+  the failure text; no partial event list is exposed. Camera and MapLevel are
+  never mutated.
+- `BspTraceReset` is idempotent, accepts a zero-initialized caller structure, makes
+  a valid empty trace (Count 0, Magic valid, no owned storage), frees ownership on
+  a recognized object, and rejects an unrecognized Magic or unexplained pointer
+  rather than freeing arbitrary memory.
+- `BspTraceCount` returns 0 for a valid empty trace and -1 for an unrecognized
+  object; reading a valid count does not erase a build failure diagnostic.
+  Successful `Build`/`Reset` clear stale error state. `BspTraceGet` validates the
+  index, copies any non-null requested field and rejects negative/count-boundary
+  indexes without partial writes.
+
+Determinism, safety and limits:
+
+- No `R_CheckBBox` or screen-space culling occurs. `viewangletox`, FOV
+  `clipangle`, `R_ClearClipSegs` evolving `solidsegs` and `R_AddLine` clipping do
+  not exist yet, so a naive `R_CheckBBox` would be incomplete and could hide valid
+  geometry. **The far child is always traversed**; `OcclusionSkips` counter is
+  therefore always zero in M3-03. The trace is a chronological BSP walk, **not** a
+  visible-surface list. `R_CheckBBox` remains deferred to M3-04 or a later
+  explicitly assigned projection/occlusion step.
+- Explicit stack capacity is node count + 2 (or 1 for a subsector root); a valid
+  acyclic graph's current path cannot exceed node count and LIFO pending siblings
+  fit that bound (deep 300-node synthetic chain tested). Every push/pop/item index
+  is checked; no recursive call, no infinite loop.
+- Work cap is 4,000,000 push/pop items and event cap is 1,000,000 records; initial
+  event allocation is bounded to `subCount+segCount` (at least 2), growth doubles
+  up to the cap only on capacity exhaustion with checked 64-bit byte arithmetic.
+  A 20-node cycle-free doubling DAG accepted by M2 terminates at its event budget
+  with an empty trace (no hang/OOM).
+- On-disk child encoding: `NF_SUBSECTOR ($8000)` leaf high bit and `$7FFF` index
+  mask; nonleaf node references must stay below `$8000` in canonical vanilla
+  encoding. Defensive checks reject a node root at/above `$8000`, a subsector root
+  on a node map, a subsector root without exactly one subsector, and invalid
+  root/leaf/node child indices. M2 already validated ordinary vanilla maps; these
+  traversal-side checks cover externally corrupted ready memory.
+- Shared-child DAG policy: M2 rejects cycles but permits non-cyclic sharing.
+  M3-03 **reproduces repeated node/leaf occurrences deterministically** like the
+  original recursion, under the hard visit budgets, instead of silently
+  deduplicating. This is documented and tested (B47 deterministic repetition;
+  B48 budget exhaustion).
+- Counters: visited nodes/subsectors, emitted segs/events, work items,
+  occlusion skips. No global sorting/deduplication, no REJECT/BLOCKMAP visibility
+  classification, no emission of every sector linedef; only the subsector SEGS
+  range is authoritative.
+
+Verified behaviour (Windows x64, PureBasic 6.41):
+`PureBasic 6.41 (Windows - x64) - (c) 2026 Fantaisie Software`.
+
+- `tests/unit/bsp_traversal_tests.pb`: B01–B48, **48 cases / 669 assertions / 0
+  failures**. Test-only original tiny map records built through the M2 decoders and
+  `MapValidateLevel`; no WAD/video dependency. B32 compares the production iterative
+  trace against a separate test-only recursive reference interpreter. B31 traverses
+  a 300-node/301-subsector deep chain with 602 events and explicit work counters;
+  B40/B47/B48 prove repeatability, deterministic DAG repetition and controlled
+  exponential-DAG budget failure.
+- `tests/integration/m3_bsp_tests.pb`: I01–I03, **3 cases / 87 assertions / 0
+  failures**. Self-created ten-lump PWADs through the real WAD/MapLevel APIs; I01
+  nested-tree full order and links; I02 WADClose/level-reset/reload/reopen/repeat
+  reset and failed-build cleanup; I03 malformed node rejection by the real loader,
+  late geometry overflow and doubling-DAG trace-budget failure, unchanged
+  camera/level and successful recovery.
+- `tests/integration/m3_bsp_iwad_tests.pb`: without path I04 **NOT RUN** exit 0.
+  With owner Ultimate Doom 1.9ud (`data/DOOM.WAD`, read-only): **1 case / 45
+  assertions / 0 failures**, file size 12,408,292 and MD5
+  `c4fe9fd920207691a9f493668e0a2083` unchanged before/after. Camera from the first
+  validated player-one THING start (`P_SpawnPlayer` heading `ANG45*(angle/45)`);
+  culling disabled:
+  - E1M1: 239 subsector events / 747 seg events / 986 total; 238 nodes visited;
+    239/747 leaf/seg counters; duplicate/missing subs 0/0, segs 0/0, occlusion
+    skips 0; FNV-1a64 canonical trace `E45EF6B5D6BF7660`.
+  - E1M2: 448 / 1,463 / 1,911; 447 nodes; 448/1,463; 0 duplicates/missing;
+    `33F4DA57BA294E8A`.
+  - E4M1: 196 / 695 / 891; 195 nodes; 196/695; 0 duplicates/missing;
+    `251409E7266F6A9`.
+  Repeated loads produce identical hashes/counts. Only coarse totals and
+  non-reconstructable hashes are printed; no coordinates, WAD payloads, graphics,
+  textures, sprites or screenshots are stored.
+- Full regression rerun after M3-03 (observed, not predicted):
+  - synthetic/non-IWAD: previous 464 cases / 2,704 assertions remain green; adding
+    B01–B48 (48/669) and I01–I03 (3/87) gives **515 cases / 3,460 assertions**, 0
+    failures.
+  - owner-IWAD optional runs: M2 integration 36/240, M3-01 FI04 1/32, M3-02 I04
+    1/29 and M3-03 I04 1/45; combined all synthetic plus optional observed total
+    **519 cases / 3,585 assertions**, 0 failures.
+  - `scripts/test.ps1`: without an owner path **101/101 checks pass**; with
+    `-IwadPath <legal IWAD>` (read-only optional I04 and `--map-info`
+    E1M1/E1M2/E4M1 CLI checks) **117/117 checks pass**.
+  - CLI regression `DoomPB 0.2.0`: `--version`, `--help`, startup, usage errors,
+    `--dump-info` (2,306 lumps / 12,408,292 bytes), `--lump-info PLAYPAL` (index 0,
+    offset 12, size 10,752), `--map-info E1M1/E1M2/E4M1` all exit 0;
+    `--show-title` against the local legal IWAD opened window title
+    `DoomPB - TITLEPIC (M1-04)` at 960x600, accepted WM_CLOSE and exited 0 with
+    `TITLEPIC: 320x200 -> 960x600 (3x nearest-neighbour)`.
+- `build.sh`/`test.sh` additions mirror the Windows flags; Git Bash `bash -n`
+  returned 0 for both. Linux x64 compilation/runtime remains **NOT RUN**; Bash
+  syntax is not treated as Linux validation.
+- Documentation lookup: **Context7 USED**. Resolved `/websites/purebasic` and used
+  focused official-documentation-derived queries for `Dim`/local arrays,
+  `AllocateMemory`/`FreeMemory`/`ReAllocateMemory`/`CopyMemory`, `PokeL`/`PeekL`/
+  `PokeQ`, `SizeOf`, structure pointer fields, procedure syntax/scoping,
+  `DeleteDirectory` return/pattern and `Fingerprint`/`UseMD5Fingerprint`.
+  The pinned C source remained authoritative for Doom semantics; the real
+  PureBasic 6.41 compiler rejected invented `Int64()` and helped verify
+  `Protected Dim`, pointer-array element access and typed pointer syntax. Official
+  local `PureBasic.chm` and real compiler probes were fallbacks for behavior not
+  returned by Context7.
+
+Intentional differences from original Doom (all safety/diagnostic choices):
+
+- C recursion is replaced by an explicit bounded stack; the observed leaf/seg
+  order is deliberately identical to recursive `R_RenderBSPNode` (proven by B32).
+- `R_CheckBBox` is **not ported or approximated** at M3-03; no speculative FOV/
+  bbox culling is substituted. This is a scope deferral, not a final visibility
+  algorithm claim.
+- Original C signed `x-node->x`/`y-node->y` overflow is undefined; DoomPB rejects
+  the overflow via the already documented `GeometryPointOnNodeSideChecked` policy
+  before publishing a trace. Node map-unit conversion is checked and exact.
+- Original root `-1` is represented by M2's explicit zero-node/subssector-0 root
+  convention; node maps use `nodeCount-1` from `MapLevelGetBspRoot`, never node 0.
+- The original uses global renderer `viewx/viewy`/`viewangle`; DoomPB carries them
+  in a caller-owned camera and never mutates renderer/simulation globals.
+- M3-03 deliberately does not emit `drawsegs`, wall ranges, plane/sprite work,
+  screen columns or occlusion state; it is a non-rendering developer trace.
+- A valid acyclic shared-child DAG is traversed with repeated occurrences under
+  hard budgets instead of being silently collapsed; cycles remain M2-hard errors.
+- All index/budget/geometry/OOM failures are diagnostics with transactional empty
+  output; original C would trust malformed data and could recurse unboundedly.
+
+Milestone/limits note: M3-03 implements BSP traversal only. Screen projection,
+`R_InitTextureMapping`/viewangletox, solid wall clipping, drawsegs, textured
+columns, `R_CheckBBox` occlusion and `v0.3.0` are **not** complete. Application
+version remains `0.2.0`; no tag/commit was created by this task.
 
 ## Compatibility conventions adopted so far
 

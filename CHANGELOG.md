@@ -3,11 +3,13 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
-## [Unreleased] - M3 math, BAM angle and geometry foundation
+## [Unreleased] - M3 math, BAM angle, geometry and deterministic BSP traversal
 
 M3 is not complete; the application version remains `0.2.0`. No tag or release
-is created for this increment. M3-01 and M3-02 modules/tests are in the working
-tree; BSP traversal and wall rendering remain M3-03 onward.
+is created for this increment. M3-01, M3-02 and M3-03 modules/tests are in the
+working tree; screen projection, wall clipping/textured rendering and faithful
+`R_CheckBBox` occlusion remain later M3-04+ steps. M3-03 produces a non-rendering
+developer BSP trace, not visible walls.
 
 ### Added
 
@@ -54,6 +56,47 @@ tree; BSP traversal and wall rendering remain M3-03 onward.
   targets and `--geometry-test`, `--geometry-integration-test`,
   `--geometry-iwad-test` Bash targets; both test runners execute the new suites.
 
+- `src/Renderer/Camera.pbi`: caller-owned fixed `BspCamera` with signed 16.16 X/Y,
+  raw unsigned BAM heading in `.q`, checked map-unit/fixed creation, transactional
+  setters, idempotent empty reset and read-only accessors. No simulation/renderer
+  globals are mutated.
+- `src/Renderer/BSP.pbi`: deterministic, iterative `R_RenderBSPNode`-equivalent
+  traversal from a ready validated `MapLevel`; original near-before-far order via
+  the existing exact point-on-node geometry; owned chronological
+  `SUBSECTOR`/`SEG` trace with stable leaf/seg/sector/linedef/side links; explicit
+  bounded LIFO stack, 1,000,000-event and 4,000,000-work caps, checked growing
+  storage, transactional reset and deterministic shared-DAG repetition.
+- Deliberately deferred `R_CheckBBox`/viewangletox/clipangle/solidsegs occlusion:
+  the far child is always traversed, occlusion-skip counter stays zero, and the
+  trace is documented as a chronological BSP walk rather than a visible-surface
+  list. No wall projection, drawsegs, textured columns, planes or sprites.
+- `tests/unit/bsp_traversal_tests.pb`: B01-B48 (48 cases, 669 assertions) covering
+  null/unready/corrupt roots, zero-node root, side ties/signed/diagonal partitions,
+  nested order, last-node roots, child encoding, absolute seg ranges/interleaving,
+  links/sentinels, rejected invalid ranges/cycles, a 300-node deep iterative chain,
+  an independent recursive LIFO oracle, heading neutrality, camera exactness/raw
+  BAM/overflow, geometry failure cleanup, repeatability/lifetime/reset/accessors,
+  deterministic DAG repetition and controlled exponential-DAG budget exhaustion.
+- `tests/integration/m3_bsp_tests.pb`: I01-I03 (3 cases, 87 assertions) through the
+  real synthetic WAD/MapLevel APIs: full nested trace/order/links; WADClose,
+  level-reset, distinct map load/reload, reopen, repeat reset, failed-build
+  cleanup; malformed node rejection, late geometry and DAG budget failures with
+  unchanged camera/level and valid recovery.
+- `tests/integration/m3_bsp_iwad_tests.pb`: optional read-only I04 for a legal
+  owner IWAD; player-one THING fixed camera, complete E1M1/E1M2/E4M1 cull-free
+  traces, duplicate/missing checks, repeat hashes and before/after size+MD5
+  unchanged verification.
+- `-BspTest`, `-BspIntegrationTest`, `-BspIwadTest` PowerShell targets;
+  `--bsp-test`, `--bsp-integration-test`, `--bsp-iwad-test` Bash targets.
+  `scripts/test.ps1` gains optional `-IwadPath`; `scripts/test.sh` gains optional
+  `IWAD_PATH`. With a path they run read-only M3-03 I04 and `--map-info`
+  E1M1/E1M2/E4M1 CLI checks; without one I04 reports NOT RUN.
+- `src/DoomPB.pb` includes Camera/BSP for compile coverage only; CLI, version and
+  ordinary startup remain unchanged.
+- README/PORTING_NOTES/DEVELOPMENT_PLAN/CHANGELOG document the M3-03 trace as a
+  non-rendering capability, its deferred occlusion boundary, ownership/budget/DAG
+  policy and observed results.
+
 ### Verified
 
 - Windows x64, PureBasic 6.41: fixed math suite 43 cases / 318 assertions / 0
@@ -69,11 +112,36 @@ tree; BSP traversal and wall rendering remain M3-03 onward.
   vectors.
 - Owner IWAD canonical geometry checksums: E1M1 `0DCDBF94926A3A32`, E1M2
   `A0CE3E0A0142A80E`, E4M1 `B7D9E25BCA4CF7B5`; repeated loads identical.
-- `scripts/test.ps1`: observed 86/86 checks; all prior M0/M1/M2/M3-01 suites
-  rerun green (464 synthetic cases / 2,704 assertions); owner-IWAD runs M2
-  integration 36/240, M3-01 FI04 1/32 and M3-02 I04 1/29. `--version` prints
-  `DoomPB 0.2.0`, `--help`, `--dump-info`, `--lump-info`, `--map-info` and
-  `--show-title` remain available. Linux x64 NOT RUN.
+- `scripts/test.ps1`: observed 86/86 checks at the M3-02 increment; all prior
+  M0/M1/M2/M3-01 suites rerun green (464 synthetic cases / 2,704 assertions);
+  owner-IWAD runs M2 integration 36/240, M3-01 FI04 1/32 and M3-02 I04 1/29.
+  `--version` prints `DoomPB 0.2.0`, `--help`, `--dump-info`, `--lump-info`,
+  `--map-info` and `--show-title` remain available. Linux x64 NOT RUN.
+
+- M3-03, Windows x64 PureBasic 6.41: B01-B48 **48 cases / 669 assertions / 0
+  failures**; synthetic I01-I03 **3 cases / 87 assertions / 0 failures**; optional
+  owner-IWAD I04 **1 case / 45 assertions / 0 failures**. The owner Ultimate Doom
+  1.9ud `DOOM.WAD` (12,408,292 bytes, MD5 `c4fe9fd920207691a9f493668e0a2083`)
+  stayed unchanged before/after read-only runs.
+- M3-03 real cull-free traces (player-start camera): E1M1 239 subsectors / 747
+  segs / 986 events / 238 nodes / FNV-1a64 `E45EF6B5D6BF7660`; E1M2 448 / 1,463 /
+  1,911 / 447 / `33F4DA57BA294E8A`; E4M1 196 / 695 / 891 / 195 /
+  `251409E7266F6A9`. Duplicate/missing subsector and seg occurrences are 0/0 in
+  every map; occlusion skips 0; repeated traces identical.
+- Full regression rerun: prior synthetic totals remain green at 464/2,704; new
+  BSP unit/integration totals make the synthetic/non-IWAD observed total **515
+  cases / 3,460 assertions / 0 failures**. Optional owner-IWAD runs add M2
+  integration 36/240, M3-01 FI04 1/32, M3-02 I04 1/29 and M3-03 I04 1/45: combined
+  observed **519 cases / 3,585 assertions / 0 failures**.
+- `scripts/test.ps1`: without an IWAD path **101/101 checks pass**; with
+  `-IwadPath` for the legal local IWAD **117/117 checks pass**, including read-only
+  I04 and `--map-info E1M1/E1M2/E4M1`. `build.sh`/`test.sh` mirror the flags and
+  Git Bash `bash -n` passes; Linux x64 runtime remains NOT RUN.
+- CLI regression: `--version` = `DoomPB 0.2.0` exit 0; `--dump-info` prints a
+  12,408,292-byte IWAD with 2,306 lumps; `--lump-info PLAYPAL` index 0/offset 12/
+  size 10,752;
+  `--map-info` E1M1/E1M2/E4M1 exit 0; `--show-title` opened
+  `DoomPB - TITLEPIC (M1-04)` at 960x600, accepted WM_CLOSE and exited 0.
 
 ## [0.2.0] - 2026-11-16
 

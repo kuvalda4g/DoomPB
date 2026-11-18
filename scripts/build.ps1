@@ -78,6 +78,18 @@
     Build the optional M3-02 real-IWAD angle/geometry integration test program
     (tests/integration/m3_geometry_iwad_tests.pb) instead of the main executable.
 
+.PARAMETER BspTest
+    Build the M3-03 deterministic BSP traversal unit test program
+    (tests/unit/bsp_traversal_tests.pb) instead of the main executable.
+
+.PARAMETER BspIntegrationTest
+    Build the M3-03 synthetic WAD/level/camera/trace integration test program
+    (tests/integration/m3_bsp_tests.pb) instead of the main executable.
+
+.PARAMETER BspIwadTest
+    Build the optional M3-03 real-IWAD deterministic BSP integration test program
+    (tests/integration/m3_bsp_iwad_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -132,6 +144,15 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -GeometryIwadTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -BspTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -BspIntegrationTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -BspIwadTest
 #>
 [CmdletBinding()]
 param(
@@ -152,6 +173,9 @@ param(
     [switch]$GeometryTest,
     [switch]$GeometryIntegrationTest,
     [switch]$GeometryIwadTest,
+    [switch]$BspTest,
+    [switch]$BspIntegrationTest,
+    [switch]$BspIwadTest,
     [string]$CompilerPath = ''
 )
 
@@ -178,12 +202,24 @@ if ($FixedIwadTest) { $selectedTargets++ }
 if ($GeometryTest) { $selectedTargets++ }
 if ($GeometryIntegrationTest) { $selectedTargets++ }
 if ($GeometryIwadTest) { $selectedTargets++ }
+if ($BspTest) { $selectedTargets++ }
+if ($BspIntegrationTest) { $selectedTargets++ }
+if ($BspIwadTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($GeometryIwadTest) {
+if ($BspIwadTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_bsp_iwad_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3BspIwadTests.exe'
+} elseif ($BspIntegrationTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_bsp_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3BspTests.exe'
+} elseif ($BspTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\bsp_traversal_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-BspTraversalTests.exe'
+} elseif ($GeometryIwadTest) {
     $sourceFile = Join-Path $repoRoot 'tests\integration\m3_geometry_iwad_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-M3GeometryIwadTests.exe'
 } elseif ($GeometryIntegrationTest) {

@@ -15,10 +15,16 @@ ticks and WAD compatibility — rather than to reimagine it.
 > textures. The M3-01 signed 16.16 fixed-point math module, the M3-02 raw BAM
 > angle model, exact vanilla sine/tangent/atan tables and checked geometry
 > primitives (`R_PointToAngle`, `R_PointToDist`, `R_PointOnSide`,
-> `R_PointOnSegSide`) are implemented and tested in the working tree. BSP
-> traversal, wall projection, the world renderer and gameplay are still pending;
-> M3 as a whole is not complete. The application version remains `0.2.0`. Linux
-> x64 runtime is **NOT RUN**. No Git tag exists until the owner creates it.
+> `R_PointOnSegSide`) are implemented and tested in the working tree. M3-03 adds
+> a caller-owned fixed camera and a deterministic iterative BSP traversal with an
+> owned chronological `SUBSECTOR`/`SEG` trace: original near-to-far order, no
+> recursion, explicit work stack/event budgets and transactional cleanup. It
+> deliberately does **not** implement `R_CheckBBox`/FOV/solidsegs culling and
+> does **not** render walls, planes or sprites; screen projection, wall clipping/
+> textured columns and the world renderer remain M3-04+. Gameplay, UI and audio
+> are still pending, M3 as a whole is not complete and `v0.3.0` is not prepared.
+> The application version remains `0.2.0`. Linux x64 runtime is **NOT RUN**. No
+> Git tag exists until the owner creates it.
 
 ## Legal notice
 
@@ -101,6 +107,15 @@ repository.
 # Build the optional M3-02 geometry IWAD tests -> build/DoomPB-M3GeometryIwadTests.exe
 ./scripts/build.ps1 -GeometryIwadTest
 
+# Build the M3-03 BSP traversal tests -> build/DoomPB-BspTraversalTests.exe
+./scripts/build.ps1 -BspTest
+
+# Build the M3-03 synthetic WAD/level/camera/trace integration tests -> build/DoomPB-M3BspTests.exe
+./scripts/build.ps1 -BspIntegrationTest
+
+# Build the optional M3-03 real-IWAD BSP tests -> build/DoomPB-M3BspIwadTests.exe
+./scripts/build.ps1 -BspIwadTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -162,6 +177,15 @@ repository.
 # Build the optional M3-02 geometry IWAD tests -> build/DoomPB-M3GeometryIwadTests
 ./scripts/build.sh --geometry-iwad-test
 
+# Build the M3-03 BSP traversal tests -> build/DoomPB-BspTraversalTests
+./scripts/build.sh --bsp-test
+
+# Build the M3-03 synthetic WAD/level/camera/trace integration tests -> build/DoomPB-M3BspTests
+./scripts/build.sh --bsp-integration-test
+
+# Build the optional M3-03 real-IWAD BSP tests -> build/DoomPB-M3BspIwadTests
+./scripts/build.sh --bsp-iwad-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
@@ -174,17 +198,25 @@ framebuffer/presentation, COLORMAP/PNAMES, TEXTURE1/TEXTURE2 definitions,
 composite wall textures, flat/sprite namespaces, vanilla map binaries, map
 loader/cross-reference validation and M2 end-to-end resource/map integration),
 the M3-01 fixed-point suite, the M3-02 BAM angle/exact-table/geometry suite,
-the M3-02 synthetic geometry integration suite and both optional IWAD harnesses
-(NOT RUN without a supplied path), plus smoke tests against the produced
-executable. They need no game data and no graphical display; no window is opened
-by the automated suite. `--show-title` remains an owner/gui interactive check.
+the M3-02 synthetic geometry integration suite, the M3-03 BSP traversal suite
+(B01-B48), its synthetic WAD/level/camera/trace integration (I01-I03) and all
+optional IWAD harnesses (NOT RUN without a supplied path), plus smoke tests
+against the produced executable. They need no game data and no graphical display
+for the synthetic suite; no window is opened by the automated suite without an
+explicit IWAD path. `--show-title` remains an owner/gui interactive check.
 
 ```powershell
-./scripts/test.ps1     # Windows
+./scripts/test.ps1     # Windows; synthetic only, optional IWAD I04 NOT RUN
+
+./scripts/test.ps1 -IwadPath 'D:\path\to\legally-owned\DOOM.WAD'
+# Windows; adds read-only M3-03 E1M1/E1M2/E4M1 I04 and --map-info CLI checks
 ```
 
 ```bash
-./scripts/test.sh      # Linux
+./scripts/test.sh      # Linux; synthetic only, optional IWAD I04 NOT RUN
+
+IWAD_PATH=/path/to/legally-owned/DOOM.WAD ./scripts/test.sh
+# Linux; adds read-only M3-03 E1M1/E1M2/E4M1 I04 and --map-info CLI checks
 ```
 
 A test run fails with a non-zero exit code if any check fails.
@@ -569,6 +601,68 @@ Known limitations at `0.2.0`: single-WAD operation, no PWAD overlay support, no
 generic `LumpCache` or renderer-side column cache, no world rendering or
 gameplay, and no Linux runtime validation. `F_SKY1` is accepted as an ordinary
 flat for resource binding; sky rendering belongs to M4.
+
+## Fixed camera and deterministic BSP traversal (M3-03)
+
+`src/Renderer/Camera.pbi` carries the original renderer's fixed position and raw
+BAM heading in a caller-owned structure without mutating game/renderer globals:
+
+```text
+BspCameraSetMapUnits(*Camera, X.q, Y.q, HeadingRaw.q)
+BspCameraSetFixed(*Camera, X.l, Y.l, HeadingRaw.q)
+BspCameraReset(*Camera)
+BspCameraGet(*Camera, *X.Long, *Y.Long, *Heading.Quad)
+BspCameraLastError()
+```
+
+- X/Y are signed 16.16 fixed-point `.l` values. Map-unit creation uses checked
+  `FixedFromIntChecked` (signed C-SHORT domain) and is transactional.
+- Heading is a canonical raw **unsigned** 32-bit BAM `.q` value in
+  `0..$FFFFFFFF`, so `ANG180`/`ANG270` are stored as 2147483648/3221225472, not
+  negative signed integers. M3-03 cull-free traversal depends only on X/Y; the
+  heading is retained for later projection work.
+- The camera owns no heap memory; `Reset` makes a reusable empty (not ready)
+  object and is idempotent. It is not a player actor: no input, `viewz` or 35 Hz
+  simulation state.
+
+`src/Renderer/BSP.pbi` walks a **ready validated `MapLevel`** from that camera:
+
+```text
+BspTraceBuild(*Level.MapLevel, *Camera.BspCamera, *Trace.BspTrace)
+BspTraceReset(*Trace.BspTrace)
+BspTraceCount(*Trace.BspTrace)
+BspTraceGet(*Trace, EventIndex, *Kind, *Subsector, *Seg, *Sector,
+            *Linedef, *Side, *FrontSector, *BackSector)
+BspTraceLastError()
+```
+
+- Root comes from `MapLevelGetBspRoot`: node maps use the last node index,
+  zero-node/one-subsector maps use subsector 0 (the safe equivalent of original
+  `R_RenderBSPNode(-1)`). Node 0 is never assumed.
+- At each node the near child is chosen by the existing exact
+  `GeometryPointOnNodeSideChecked`; near subtree is processed first, then the far
+  subtree **always** in this phase. C recursion is replaced by an explicit bounded
+  LIFO stack (`nodeCount+2` capacity); no recursive call or unbounded allocation.
+- One chronological event stream: `SUBSECTOR` entry (derived sector, irrelevant
+  fields `-1`) followed by one `SEG` event per canonical increasing
+  `firstseg..firstseg+numsegs-1`, carrying absolute seg, owning leaf, derived
+  sector, linedef, side and front/back sectors (`BackSector=-1` one-sided).
+- The trace deep-copies every numeric event and never retains MapLevel/stack/WAD
+  pointers; it survives `MapLevelReset`/`WADClose`. Builds are transactional: a
+  null/unready/corrupt input, geometry overflow, stack/work/event budget
+  exhaustion or OOM leaves a valid empty trace with diagnostics; camera/level are
+  unchanged. Initial event storage is bounded by conventions `subCount+segCount`,
+  with caps of 1,000,000 events and 4,000,000 stack push/pop work items.
+- Non-cyclic shared-child DAG nodes are followed repeatedly under those budgets,
+  matching original recursion's occurrences instead of silent deduplication;
+  M2 still rejects cycles.
+- **No `R_CheckBBox`/FOV/solidsegs occlusion**: `viewangletox`, `clipangle` and
+  evolving `solidsegs` do not exist yet, so this trace is a chronological BSP walk
+  rather than a visible-surface list and the counter reports zero occlusion skips.
+  Absolute screen-space visibility must not be inferred from it. Wall projection,
+  clipping, drawsegs and a faithful `R_CheckBBox` belong to later M3-04 work.
+- `DoomPB.pb` includes the modules for compile coverage only; ordinary startup
+  does not load a map, create a camera or start rendering traversal.
 
 ## Framebuffer and presentation
 

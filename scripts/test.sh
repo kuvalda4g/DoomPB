@@ -8,10 +8,14 @@
 # flat/sprite namespace, vanilla map binary and map loader/validation unit
 # tests, M2 end-to-end resource/map integration tests, M3-01 fixed-point tests
 # and optional IWAD harness, M3-02 BAM angle/exact-table/geometry tests with
-# synthetic and optional IWAD integration, and smoke tests
+# synthetic and optional IWAD integration, M3-03 deterministic BSP traversal
+# unit B01-B48, its synthetic WAD/level/camera/trace integration I01-I03 and
+# optional real-IWAD I04, and smoke tests
 # against the produced executable: --version, --help, no-argument startup,
 # unknown-option handling, --lump-info argument validation and nonblocking
-# --show-title failures. No commercial game data and no display are needed.
+# --show-title failures. No commercial game data and no display are needed for
+# the synthetic suite. When IWAD_PATH points at an owner-owned legal IWAD,
+# optional M3-03 I04 and --map-info CLI checks additionally run read-only.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -38,6 +42,10 @@ FIXED_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3FixedIwadTests"
 GEOMETRY_TEST_BIN="${REPO_ROOT}/build/DoomPB-AngleGeometryTests"
 GEOMETRY_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3GeometryTests"
 GEOMETRY_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3GeometryIwadTests"
+BSP_TEST_BIN="${REPO_ROOT}/build/DoomPB-BspTraversalTests"
+BSP_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3BspTests"
+BSP_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3BspIwadTests"
+IWAD_PATH="${IWAD_PATH:-}"
 CHECKS=0
 FAILURES=0
 LAST_STATUS=0
@@ -789,6 +797,206 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+printf '\n== M3-03 BSP traversal unit test build ==\n'
+run_build --check --bsp-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-03 BSP unit test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-03 BSP unit test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-03 BSP unit test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --bsp-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-03 BSP unit test build exits with 0\n'
+else
+    printf 'FAIL: M3-03 BSP unit test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-03 BSP unit test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${BSP_TEST_BIN}" ]; then
+    printf 'PASS: M3-03 BSP unit test output exists: %s\n' "${BSP_TEST_BIN}"
+else
+    printf 'FAIL: M3-03 BSP unit test output missing: %s\n' "${BSP_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-03 BSP unit test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-03 BSP traversal unit tests (B01-B48) ==\n'
+bsp_unit_output="$("${BSP_TEST_BIN}" 2>&1)"
+bsp_unit_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${bsp_unit_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-03 BSP traversal tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-03 BSP traversal tests exit with %s\n' "${bsp_unit_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${bsp_unit_output}" | grep -Eq -- '^Cases: 48, assertions: 669, failures: 0$'; then
+    printf 'PASS: M3-03 B01-B48 runs 48 cases/669 assertions/0 failures\n'
+else
+    printf 'FAIL: M3-03 B01-B48 case/assertion totals differ\n%s\n' "${bsp_unit_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-03 BSP synthetic integration test build ==\n'
+run_build --check --bsp-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-03 BSP integration test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-03 BSP integration test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-03 BSP integration test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --bsp-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-03 BSP integration test build exits with 0\n'
+else
+    printf 'FAIL: M3-03 BSP integration test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-03 BSP integration test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${BSP_INTEGRATION_TEST_BIN}" ]; then
+    printf 'PASS: M3-03 BSP integration test output exists: %s\n' "${BSP_INTEGRATION_TEST_BIN}"
+else
+    printf 'FAIL: M3-03 BSP integration test output missing: %s\n' "${BSP_INTEGRATION_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-03 BSP integration test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-03 BSP synthetic integration tests (I01-I03) ==\n'
+bsp_integration_output="$("${BSP_INTEGRATION_TEST_BIN}" 2>&1)"
+bsp_integration_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${bsp_integration_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-03 BSP integration tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-03 BSP integration tests exit with %s\n' "${bsp_integration_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${bsp_integration_output}" | grep -Eq -- '^Cases: 3, assertions: 87, failures: 0$'; then
+    printf 'PASS: M3-03 I01-I03 runs 3 cases/87 assertions/0 failures\n'
+else
+    printf 'FAIL: M3-03 I01-I03 case/assertion totals differ\n%s\n' "${bsp_integration_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-03 optional IWAD BSP integration test build ==\n'
+run_build --check --bsp-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-03 optional IWAD BSP test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-03 optional IWAD BSP test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-03 optional IWAD BSP test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --bsp-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-03 optional IWAD BSP test build exits with 0\n'
+else
+    printf 'FAIL: M3-03 optional IWAD BSP test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-03 optional IWAD BSP test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${BSP_IWAD_TEST_BIN}" ]; then
+    printf 'PASS: M3-03 optional IWAD BSP test output exists: %s\n' "${BSP_IWAD_TEST_BIN}"
+else
+    printf 'FAIL: M3-03 optional IWAD BSP test output missing: %s\n' "${BSP_IWAD_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-03 optional IWAD BSP test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-03 optional IWAD BSP integration tests ==\n'
+if [ -z "${IWAD_PATH}" ]; then
+    bsp_iwad_output="$("${BSP_IWAD_TEST_BIN}" 2>&1)"
+    bsp_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${bsp_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional IWAD BSP tests exit with 0 without a WAD path\n'
+    else
+        printf 'FAIL: optional IWAD BSP tests exit with %s\n' "${bsp_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${bsp_iwad_output}" | grep -Eq -- 'NOT RUN'; then
+        printf 'PASS: optional IWAD BSP tests report NOT RUN without a path\n'
+    else
+        printf 'FAIL: optional IWAD BSP tests did not report NOT RUN\n%s\n' "${bsp_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    CHECKS=$((CHECKS + 1))
+    if [ -f "${IWAD_PATH}" ]; then
+        printf 'PASS: explicit owner IWAD path exists\n'
+    else
+        printf 'FAIL: explicit owner IWAD path does not exist\n' >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    bsp_iwad_output="$("${BSP_IWAD_TEST_BIN}" "${IWAD_PATH}" 2>&1)"
+    bsp_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${bsp_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional IWAD BSP E1M1/E1M2/E4M1 integration exits with 0\n'
+    else
+        printf 'FAIL: optional IWAD BSP integration exits with %s\n' "${bsp_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${bsp_iwad_output}" | grep -Eq -- '^RESULT: PASS'; then
+        printf 'PASS: optional IWAD BSP integration reports PASS\n'
+    else
+        printf 'FAIL: optional IWAD BSP integration did not report PASS\n%s\n' "${bsp_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${bsp_iwad_output}" | grep -q -- 'E1M1: player-start camera'; then
+        printf 'PASS: optional IWAD BSP integration actually ran E1M1\n'
+    else
+        printf 'FAIL: optional IWAD BSP integration E1M1 measurement missing\n%s\n' "${bsp_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${bsp_iwad_output}" | grep -q -- 'E4M1: player-start camera'; then
+        printf 'PASS: optional IWAD BSP integration actually ran E4M1\n'
+    else
+        printf 'FAIL: optional IWAD BSP integration E4M1 measurement missing\n%s\n' "${bsp_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${bsp_iwad_output}" | grep -Eq -- 'owner IWAD remains unchanged'; then
+        printf 'PASS: owner IWAD read-only size/MD5 unchanged\n'
+    else
+        printf 'FAIL: owner IWAD unchanged verification missing\n%s\n' "${bsp_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+fi
+
 printf '\n== M2 end-to-end integration test build ==\n'
 run_build --check --integration-test
 CHECKS=$((CHECKS + 1))
@@ -859,6 +1067,42 @@ check_case '--dump-info with --lump-info exits with 2' 2 '' --dump-info --lump-i
 check_case '--show-title without --iwad exits with 2' 2 '' --show-title
 check_case 'missing WAD for --show-title exits with 1' 1 '' --iwad definitely-missing-doompb.wad --show-title
 check_case '--dump-info with --show-title exits with 2' 2 '' --dump-info --show-title
+
+if [ -n "${IWAD_PATH}" ] && [ -f "${IWAD_PATH}" ]; then
+    printf '\n== Optional IWAD CLI map-info regression ==\n'
+    for map_name in E1M1 E1M2 E4M1; do
+        map_info_output="$("${BIN}" --iwad "${IWAD_PATH}" --map-info "${map_name}" 2>&1)"
+        map_info_status=$?
+        CHECKS=$((CHECKS + 1))
+        if [ "${map_info_status}" -eq 0 ]; then
+            printf 'PASS: --map-info %s exits with 0\n' "${map_name}"
+        else
+            printf 'FAIL: --map-info %s exits with %s\n' "${map_name}" "${map_info_status}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${map_info_output}" | grep -Eq -- "^Map: ${map_name}$"; then
+            printf 'PASS: --map-info %s prints canonical map identity\n' "${map_name}"
+        else
+            printf 'FAIL: --map-info %s map identity missing\n%s\n' "${map_name}" "${map_info_output}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${map_info_output}" | grep -q -- '^BSP root:'; then
+            printf 'PASS: --map-info %s reports its M2 BSP root\n' "${map_name}"
+        else
+            printf 'FAIL: --map-info %s BSP-root line missing\n' "${map_name}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${map_info_output}" | grep -q -- '^Validation: OK'; then
+            printf 'PASS: --map-info %s validates the level\n' "${map_name}"
+        else
+            printf 'FAIL: --map-info %s validation line missing\n' "${map_name}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
+fi
 
 printf '\n'
 if [ "${FAILURES}" -ne 0 ]; then

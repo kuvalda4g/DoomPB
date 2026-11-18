@@ -9,23 +9,33 @@
     wall-texture, flat/sprite namespace, vanilla map binary, map loader/
     validation and M2 end-to-end resource/map integration unit tests, the M3-01
     fixed-point suite with its optional IWAD harness, the M3-02 BAM angle/exact
-    trig-table/geometry suite with synthetic and optional IWAD integration, and
+    trig-table/geometry suite with synthetic and optional IWAD integration, the
+    M3-03 deterministic BSP traversal unit suite B01-B48, its synthetic
+    WAD/level/camera/trace I01-I03 integration and optional real-IWAD I04, and
     smoke tests against the produced executable:
     --version, --help, no-argument startup, unknown-option handling,
     --lump-info argument validation and nonblocking --show-title failures.
-    No commercial game data and no display are needed.
+    No commercial game data and no display are needed for the synthetic suite.
+    When -IwadPath supplies an owner-owned legal IWAD, optional M3-03 I04 and
+    --map-info CLI checks additionally run read-only on the same file.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler, forwarded to build.ps1.
 
+.PARAMETER IwadPath
+    Optional owner-provided legal IWAD path. It is never printed into committed
+    files or logs. Without it, optional M3-03 I04 is reported NOT RUN and no
+    commercial game data is read.
+
 .EXAMPLE
     ./scripts/test.ps1
 #>
 [CmdletBinding()]
 param(
-    [string]$CompilerPath = ''
+    [string]$CompilerPath = '',
+    [string]$IwadPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,6 +60,9 @@ $fixedIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3FixedIwadTests.exe'
 $geometryTestExe = Join-Path $repoRoot 'build\DoomPB-AngleGeometryTests.exe'
 $geometryIntegrationTestExe = Join-Path $repoRoot 'build\DoomPB-M3GeometryTests.exe'
 $geometryIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3GeometryIwadTests.exe'
+$bspTestExe = Join-Path $repoRoot 'build\DoomPB-BspTraversalTests.exe'
+$bspIntegrationTestExe = Join-Path $repoRoot 'build\DoomPB-M3BspTests.exe'
+$bspIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3BspIwadTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -69,11 +82,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest, [switch]$GeometryTest, [switch]$GeometryIntegrationTest, [switch]$GeometryIwadTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest, [switch]$GeometryTest, [switch]$GeometryIntegrationTest, [switch]$GeometryIwadTest, [switch]$BspTest, [switch]$BspIntegrationTest, [switch]$BspIwadTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -378,6 +391,76 @@ Test-Condition ($status -eq 0) "optional IWAD geometry tests exit with 0 without
 Test-Condition ($geometryIwadOutput -match 'NOT RUN') "optional IWAD geometry tests report NOT RUN without a path"
 
 Write-Host ''
+Write-Host '== M3-03 BSP traversal unit test build =='
+$status = Invoke-BuildStep -Check -BspTest
+Test-Condition ($status -eq 0) "M3-03 BSP unit test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -BspTest
+Test-Condition ($status -eq 0) "M3-03 BSP unit test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $bspTestExe -PathType Leaf) "M3-03 BSP unit test output exists: $bspTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $bspTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3-03 BSP unit test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-03 BSP traversal unit tests (B01-B48) =='
+$bspUnitOutput = & $bspTestExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M3-03 BSP traversal tests exit with 0 (got $status)"
+Test-Condition ($bspUnitOutput -match 'Cases: 48, assertions: 669, failures: 0') "M3-03 B01-B48 runs 48 cases/669 assertions/0 failures"
+
+Write-Host ''
+Write-Host '== M3-03 BSP synthetic integration test build =='
+$status = Invoke-BuildStep -Check -BspIntegrationTest
+Test-Condition ($status -eq 0) "M3-03 BSP integration test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -BspIntegrationTest
+Test-Condition ($status -eq 0) "M3-03 BSP integration test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $bspIntegrationTestExe -PathType Leaf) "M3-03 BSP integration test output exists: $bspIntegrationTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $bspIntegrationTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3-03 BSP integration test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-03 BSP synthetic integration tests (I01-I03) =='
+$bspIntegrationOutput = & $bspIntegrationTestExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M3-03 BSP integration tests exit with 0 (got $status)"
+Test-Condition ($bspIntegrationOutput -match 'Cases: 3, assertions: 87, failures: 0') "M3-03 I01-I03 runs 3 cases/87 assertions/0 failures"
+
+Write-Host ''
+Write-Host '== M3-03 optional IWAD BSP integration test build =='
+$status = Invoke-BuildStep -Check -BspIwadTest
+Test-Condition ($status -eq 0) "M3-03 optional IWAD BSP test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -BspIwadTest
+Test-Condition ($status -eq 0) "M3-03 optional IWAD BSP test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $bspIwadTestExe -PathType Leaf) "M3-03 optional IWAD BSP test output exists: $bspIwadTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $bspIwadTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3-03 optional IWAD BSP test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-03 optional IWAD BSP integration tests =='
+if ([string]::IsNullOrWhiteSpace($IwadPath)) {
+    $bspIwadOutput = & $bspIwadTestExe 2>&1 | Out-String
+    $status = $LASTEXITCODE
+    Test-Condition ($status -eq 0) "optional IWAD BSP tests exit with 0 without a WAD path (got $status)"
+    Test-Condition ($bspIwadOutput -match 'NOT RUN') "optional IWAD BSP tests report NOT RUN without a path"
+} else {
+    Test-Condition (Test-Path -LiteralPath $IwadPath -PathType Leaf) "explicit owner IWAD path exists"
+    if (Test-Path -LiteralPath $IwadPath -PathType Leaf) {
+        $bspIwadOutput = & $bspIwadTestExe $IwadPath 2>&1 | Out-String
+        $status = $LASTEXITCODE
+        Test-Condition ($status -eq 0) "optional IWAD BSP E1M1/E1M2/E4M1 integration exits with 0 (got $status)"
+        Test-Condition ($bspIwadOutput -match '(?m)^RESULT: PASS') "optional IWAD BSP integration reports PASS"
+        Test-Condition ($bspIwadOutput -match 'E1M1: player-start camera') "optional IWAD BSP integration actually ran E1M1"
+        Test-Condition ($bspIwadOutput -match 'E4M1: player-start camera') "optional IWAD BSP integration actually ran E4M1"
+        Test-Condition ($bspIwadOutput -match 'owner IWAD remains unchanged') "owner IWAD read-only size/MD5 unchanged"
+    }
+}
+
+Write-Host ''
 Write-Host '== M2 end-to-end integration test build =='
 $status = Invoke-BuildStep -Check -IntegrationTest
 Test-Condition ($status -eq 0) "M2 integration test syntax check exits with 0 (got $status)"
@@ -436,6 +519,18 @@ Test-Condition ($result.ExitCode -eq 1) "--show-title with a missing WAD exits w
 
 $result = Invoke-DoomPB -Arguments @('--dump-info', '--show-title')
 Test-Condition ($result.ExitCode -eq 2) "--dump-info and --show-title conflict exits with 2 (got $($result.ExitCode))"
+
+if (-not [string]::IsNullOrWhiteSpace($IwadPath) -and (Test-Path -LiteralPath $IwadPath -PathType Leaf)) {
+    Write-Host ''
+    Write-Host '== Optional IWAD CLI map-info regression =='
+    foreach ($mapName in @('E1M1', 'E1M2', 'E4M1')) {
+        $result = Invoke-DoomPB -Arguments @('--iwad', $IwadPath, '--map-info', $mapName)
+        Test-Condition ($result.ExitCode -eq 0) "--map-info $mapName exits with 0 (got $($result.ExitCode))"
+        Test-Condition ($result.Output -match ('(?m)^Map: ' + $mapName + '\s*$')) "--map-info $mapName prints canonical map identity"
+        Test-Condition ($result.Output -match '(?m)^BSP root:') "--map-info $mapName reports its M2 BSP root"
+        Test-Condition ($result.Output -match '(?m)^Validation: OK') "--map-info $mapName validates the level"
+    }
+}
 
 Write-Host ''
 if ($script:failures -ne 0) {
