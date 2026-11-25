@@ -10,12 +10,15 @@
 # and optional IWAD harness, M3-02 BAM angle/exact-table/geometry tests with
 # synthetic and optional IWAD integration, M3-03 deterministic BSP traversal
 # unit B01-B48, its synthetic WAD/level/camera/trace integration I01-I03 and
-# optional real-IWAD I04, and smoke tests
+# optional real-IWAD I04, M3-04 screen-projection/wall-clipping/occlusion unit
+# WC01-WC52, its synthetic WAD/level/camera/online-visibility integration
+# I01-I03 and optional real-IWAD catalog-aware I04, and smoke tests
 # against the produced executable: --version, --help, no-argument startup,
 # unknown-option handling, --lump-info argument validation and nonblocking
 # --show-title failures. No commercial game data and no display are needed for
 # the synthetic suite. When IWAD_PATH points at an owner-owned legal IWAD,
-# optional M3-03 I04 and --map-info CLI checks additionally run read-only.
+# optional M3-03 I04, M3-04 I04 and --map-info CLI checks additionally run
+# read-only.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -45,6 +48,9 @@ GEOMETRY_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3GeometryIwadTests"
 BSP_TEST_BIN="${REPO_ROOT}/build/DoomPB-BspTraversalTests"
 BSP_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3BspTests"
 BSP_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3BspIwadTests"
+WALL_CLIPPING_TEST_BIN="${REPO_ROOT}/build/DoomPB-WallClippingTests"
+WALL_CLIPPING_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallClipTests"
+WALL_CLIPPING_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallClipIwadTests"
 IWAD_PATH="${IWAD_PATH:-}"
 CHECKS=0
 FAILURES=0
@@ -993,6 +999,220 @@ else
         printf 'PASS: owner IWAD read-only size/MD5 unchanged\n'
     else
         printf 'FAIL: owner IWAD unchanged verification missing\n%s\n' "${bsp_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+fi
+
+printf '\n== M3-04 wall-clipping unit test build ==\n'
+run_build --check --wall-clipping-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-04 wall-clipping unit test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-04 wall-clipping unit test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-04 wall-clipping unit test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --wall-clipping-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-04 wall-clipping unit test build exits with 0\n'
+else
+    printf 'FAIL: M3-04 wall-clipping unit test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-04 wall-clipping unit test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${WALL_CLIPPING_TEST_BIN}" ]; then
+    printf 'PASS: M3-04 wall-clipping unit test output exists: %s\n' "${WALL_CLIPPING_TEST_BIN}"
+else
+    printf 'FAIL: M3-04 wall-clipping unit test output missing: %s\n' "${WALL_CLIPPING_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-04 wall-clipping unit test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-04 wall-clipping unit tests (WC01-WC52) ==\n'
+wall_clipping_unit_output="$("${WALL_CLIPPING_TEST_BIN}" 2>&1)"
+wall_clipping_unit_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${wall_clipping_unit_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-04 wall-clipping unit tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-04 wall-clipping unit tests exit with %s\n' "${wall_clipping_unit_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${wall_clipping_unit_output}" | grep -Eq -- '^Cases: 52, assertions: 474, failures: 0$'; then
+    printf 'PASS: M3-04 WC01-WC52 runs 52 cases/474 assertions/0 failures\n'
+else
+    printf 'FAIL: M3-04 WC01-WC52 case/assertion totals differ\n%s\n' "${wall_clipping_unit_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-04 synthetic wall-clipping integration test build ==\n'
+run_build --check --wall-clipping-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-04 wall-clipping integration test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-04 wall-clipping integration test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-04 wall-clipping integration test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --wall-clipping-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-04 wall-clipping integration test build exits with 0\n'
+else
+    printf 'FAIL: M3-04 wall-clipping integration test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-04 wall-clipping integration test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${WALL_CLIPPING_INTEGRATION_TEST_BIN}" ]; then
+    printf 'PASS: M3-04 synthetic wall-clipping integration test output exists: %s\n' "${WALL_CLIPPING_INTEGRATION_TEST_BIN}"
+else
+    printf 'FAIL: M3-04 synthetic wall-clipping integration test output missing: %s\n' "${WALL_CLIPPING_INTEGRATION_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-04 synthetic wall-clipping integration test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-04 synthetic wall-clipping integration tests (I01-I03) ==\n'
+wall_clipping_integration_output="$("${WALL_CLIPPING_INTEGRATION_TEST_BIN}" 2>&1)"
+wall_clipping_integration_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${wall_clipping_integration_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-04 wall-clipping integration tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-04 wall-clipping integration tests exit with %s\n' "${wall_clipping_integration_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${wall_clipping_integration_output}" | grep -Eq -- '^Cases: 3, assertions: 115, failures: 0$'; then
+    printf 'PASS: M3-04 I01-I03 runs 3 cases/115 assertions/0 failures\n'
+else
+    printf 'FAIL: M3-04 I01-I03 case/assertion totals differ\n%s\n' "${wall_clipping_integration_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-04 optional IWAD wall-clipping test build ==\n'
+run_build --check --wall-clipping-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-04 optional IWAD wall-clipping test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-04 optional IWAD wall-clipping test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-04 optional IWAD wall-clipping test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --wall-clipping-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-04 optional IWAD wall-clipping test build exits with 0\n'
+else
+    printf 'FAIL: M3-04 optional IWAD wall-clipping test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-04 optional IWAD wall-clipping test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${WALL_CLIPPING_IWAD_TEST_BIN}" ]; then
+    printf 'PASS: M3-04 optional IWAD wall-clipping test output exists: %s\n' "${WALL_CLIPPING_IWAD_TEST_BIN}"
+else
+    printf 'FAIL: M3-04 optional IWAD wall-clipping test output missing: %s\n' "${WALL_CLIPPING_IWAD_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-04 optional IWAD wall-clipping test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-04 optional IWAD wall-clipping tests ==\n'
+if [ -z "${IWAD_PATH}" ]; then
+    wall_clipping_iwad_output="$("${WALL_CLIPPING_IWAD_TEST_BIN}" 2>&1)"
+    wall_clipping_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${wall_clipping_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional IWAD wall-clipping tests exit with 0 without a WAD path\n'
+    else
+        printf 'FAIL: optional IWAD wall-clipping tests exit with %s\n' "${wall_clipping_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_clipping_iwad_output}" | grep -Eq -- 'NOT RUN'; then
+        printf 'PASS: optional IWAD wall-clipping tests report NOT RUN without a path\n'
+    else
+        printf 'FAIL: optional IWAD wall-clipping tests did not report NOT RUN\n%s\n' "${wall_clipping_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    CHECKS=$((CHECKS + 1))
+    if [ -f "${IWAD_PATH}" ]; then
+        printf 'PASS: explicit owner IWAD path exists\n'
+    else
+        printf 'FAIL: explicit owner IWAD path does not exist\n' >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    wall_clipping_iwad_output="$("${WALL_CLIPPING_IWAD_TEST_BIN}" "${IWAD_PATH}" 2>&1)"
+    wall_clipping_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${wall_clipping_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional IWAD wall-clipping E1M1/E1M2/E4M1 integration exits with 0\n'
+    else
+        printf 'FAIL: optional IWAD wall-clipping integration exits with %s\n' "${wall_clipping_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_clipping_iwad_output}" | grep -Eq -- '^RESULT: PASS'; then
+        printf 'PASS: optional IWAD wall-clipping integration reports PASS\n'
+    else
+        printf 'FAIL: optional IWAD wall-clipping integration did not report PASS\n%s\n' "${wall_clipping_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_clipping_iwad_output}" | grep -q -- 'E1M1: cull-free 238 nodes'; then
+        printf 'PASS: optional IWAD wall-clipping integration actually measured E1M1\n'
+    else
+        printf 'FAIL: optional IWAD wall-clipping E1M1 measurement missing\n%s\n' "${wall_clipping_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_clipping_iwad_output}" | grep -q -- 'E1M2: cull-free 447 nodes'; then
+        printf 'PASS: optional IWAD wall-clipping integration actually measured E1M2\n'
+    else
+        printf 'FAIL: optional IWAD wall-clipping E1M2 measurement missing\n%s\n' "${wall_clipping_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_clipping_iwad_output}" | grep -q -- 'E4M1: cull-free 195 nodes'; then
+        printf 'PASS: optional IWAD wall-clipping integration actually measured E4M1\n'
+    else
+        printf 'FAIL: optional IWAD wall-clipping E4M1 measurement missing\n%s\n' "${wall_clipping_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_clipping_iwad_output}" | grep -q -- 'match decoded seg/line/side/sector identity'; then
+        printf 'PASS: optional IWAD wall-clipping spans were source-identity audited\n'
+    else
+        printf 'FAIL: optional IWAD wall-clipping source-identity audit line missing\n%s\n' "${wall_clipping_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_clipping_iwad_output}" | grep -Eq -- 'owner IWAD remains unchanged'; then
+        printf 'PASS: owner IWAD read-only size/MD5 unchanged\n'
+    else
+        printf 'FAIL: owner IWAD unchanged verification missing\n%s\n' "${wall_clipping_iwad_output}" >&2
         FAILURES=$((FAILURES + 1))
     fi
 fi

@@ -3,13 +3,14 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
-## [Unreleased] - M3 math, BAM angle, geometry and deterministic BSP traversal
+## [Unreleased] - M3 math, BAM angle, geometry, BSP traversal, screen projection/wall clipping
 
 M3 is not complete; the application version remains `0.2.0`. No tag or release
-is created for this increment. M3-01, M3-02 and M3-03 modules/tests are in the
-working tree; screen projection, wall clipping/textured rendering and faithful
-`R_CheckBBox` occlusion remain later M3-04+ steps. M3-03 produces a non-rendering
-developer BSP trace, not visible walls.
+is created for this increment. M3-01, M3-02, M3-03 and M3-04 modules/tests are
+in the working tree; drawsegs/one-color column drawing, vertical wall projection,
+textured rendering and planes remain later M3-05+ steps. M3-04 produces headless,
+owned numeric screen-column visibility intervals and counters, not rendered
+walls or a frame.
 
 ### Added
 
@@ -97,6 +98,55 @@ developer BSP trace, not visible walls.
   non-rendering capability, its deferred occlusion boundary, ownership/budget/DAG
   policy and observed results.
 
+- `src/Renderer/Projection.pbi`: immutable owned equivalent of
+  `R_InitTextureMapping` for the canonical 320-column logical view; normalized
+  4096 `viewangletox`, retained 4096 pre-fencepost entries for diagnostics, 321
+  `xtoviewangle`, original focal `10477766`/constants and raw unsigned
+  `clipangle` `0x20080000`; explicit checked table indexes and idempotent reset.
+- `src/Renderer/ClipSegs.pbi`: owned equivalent of `R_ClearClipSegs`,
+  `R_ClipSolidWallSegment`, `R_ClipPassWallSegment`; inclusive column posts,
+  original left-to-right emission order, fixed two sentinels, checked real-post
+  insertion/consolidation, pre-reserved transactional growth and caps; supports
+  independently tested widths 1..320.
+- `src/Renderer/WallVisibility.pbi`: source-faithful `R_AddLine` with exact raw
+  unsigned angle wrap, strict backface/FOV/zero-pixel reject order, catalog-aware
+  or canonical-raw SOLID/PASS/empty-trigger classification, and owned ordered
+  `WallSpan` records; full `R_CheckBBox`/`WallBoxPosition`; online near-first
+  iterative BSP walk where far boxes run only after real occlusion exists, with
+  distinct bbox/occlusion counters and transactional result reset/failure.
+- Deterministic fixture generators `scripts/gen_projection_golden.py` and
+  tracked `tests/fixtures/m3_projection_golden.pbi`; an independent Python oracle
+  for all 4096 normalized/4096 pre/inverse 321 entries and canonical FNV hashes.
+- `tests/unit/wall_clipping_tests.pb`: WC01-WC52 covering projection constants/
+  whole tables/pre/inverse/manual tangent fenceposts, sentinel clipping in tiny
+  frames, solid/pass emission, adjacent/overlap/repeat growth, independent
+  reference `R_AddLine`, stricter left/right tie helpers, classification/identity
+  fallback/catalog routes, all 48 checkcoord bytes plus reachable boxpos,
+  occluded/visible/behind/vs-cardinal bboxes, online walk order/pruning/zero-leaf/
+  failure/recovery and deterministic lifetime counters.
+- `tests/integration/m3_wall_clip_tests.pb`: I01-I03 fresh synthetic ten-lump
+  PWADs through real WAD/MapLevel APIs; near SOLID occludes far leaf; unchanged
+  M3-03 cull-free chronologies/hashes versus M3-04 SOLID occlusion and PASS
+  control; A->B->A reload/direction-change/Reset/repeat and corrupt-edge
+  transactional failure/recovery with identical restored fingerprint.
+- `tests/integration/m3_wall_clip_iwad_tests.pb`: optional read-only I04 builds
+  decoded PNAMES/TEXTURE1/TEXTURE2 and F_START/F_END catalogs, reuses one classic
+  projection, loads E1M1/E1M2/E4M1 with player-one THING cameras, cross-checks
+  cull-free reachable totals, audits every span against decoded seg/line/side/
+  sector identity and recomputes catalog-aware SOLID/PASS kind, then verifies
+  counters/bbox breakdown/live occlusion/repeat+Reset fingerprints and
+  unchanged size/MD5.
+- `-WallClippingTest`, `-WallClippingIntegrationTest`, `-WallClippingIwadTest`
+  PowerShell targets and `--wall-clipping-test`,
+  `--wall-clipping-integration-test`, `--wall-clipping-iwad-test` Bash targets;
+  `scripts/test.ps1` and `scripts/test.sh` run WC01-WC52, synthetic I01-I03 and
+  optional real-IWAD I04, with `-IwadPath`/`IWAD_PATH` adding the read-only pass.
+- `src/DoomPB.pb` compile-only includes Projection/ClipSegs/WallVisibility; CLI,
+  version `0.2.0` and ordinary startup remain unchanged.
+- README/PORTING_NOTES/DEVELOPMENT_PLAN/CHANGELOG document M3-04 as headless
+  screen-column visibility, source/safety deviations, deferred drawseg/pixel/
+  vertical/textured work and observed results.
+
 ### Verified
 
 - Windows x64, PureBasic 6.41: fixed math suite 43 cases / 318 assertions / 0
@@ -142,6 +192,62 @@ developer BSP trace, not visible walls.
   size 10,752;
   `--map-info` E1M1/E1M2/E4M1 exit 0; `--show-title` opened
   `DoomPB - TITLEPIC (M1-04)` at 960x600, accepted WM_CLOSE and exited 0.
+
+- M3-04, Windows x64 PureBasic 6.41: WC01-WC52 **52 cases / 474 assertions / 0
+  failures**; synthetic WAD/level/camera/visibility I01-I03 **3 cases / 115
+  assertions / 0 failures**; optional owner-IWAD catalog-aware I04 **1 case / 117
+  assertions / 0 failures**. The owner Ultimate Doom 1.9ud `DOOM.WAD`
+  (12,408,292 bytes, MD5 `c4fe9fd920207691a9f493668e0a2083`) stayed unchanged
+  before/after read-only runs; PNAMES 351, textures 287, flats 111 decoded and
+  resolved.
+- Projection oracle verified all 4096 normalized `viewangletox`, 4096 retained
+  pre-fencepost and 321 `xtoviewangle` entries; focal length `10477766`
+  (`0x9FE0C6`), clipangle `0x20080000`; canonical FNV-1a64 hashes normalized
+  `F45B52285F25D5DF`, pre `EAE596370F96286A`, inverse `4EC83D702DA4CD32`.
+- Synthetic integration fingerprints (measured equality with explicit expected
+  tuples): I01 two-leaf SOLID `60A24EC7D48916B4`; I02 quad SOLID
+  `5EEDC66C4BB96932`, PASS control `6CD6B90817A62A89`; I03 ANG180 visible
+  `874812E8D8EFE267`. The unchanged M3-03 cull-free quad traces remain distinct
+  from the M3-04 visibility fingerprints.
+- M3-04 real online visibility (player-start camera, catalog-aware):
+  - E1M1: 35 spans / 49 online nodes / 32 leaves / 103 segs; solid/pass
+    candidates 23/15; backface 41, FOV left/right 24/0, zero-width 0, empty 0;
+    bboxes 49 = visible/occluded/unknown 31/18/0; clip growth ranges/spans 1/0,
+    allocations 5, work items 260; span FNV `74B485154CE29B0B`; counters FNV
+    `7ADB45DBF2611B77`.
+  - E1M2: 54 spans / 69 nodes / 42 leaves / 151 segs; candidates 42/33;
+    backface 62, FOV 9/0, zero-width 5; bboxes 41/28/0; growth 1/0, allocations
+    5, work 360; span FNV `8AC0627513C4B619`; counters FNV `83CAB0E1049B850A`.
+  - E4M1: 69 spans / 49 nodes / 40 leaves / 159 segs; candidates 26/55;
+    backface 65, FOV 2/0, zero-width 10, empty 1; bboxes 39/10/0; growth 1/1,
+    allocations 6, work 276; span FNV `9FD0B15A0F33197E`; counters FNV
+    `CCAA2442EB270717`.
+  All three cull-free cross-checks retain E1M1 238/239/747, E1M2 447/448/1,463,
+  E4M1 195/196/695 node/leaf/seg totals with zero trace occlusion; each online
+  pass reports positive live occlusion and fewer leaf visits, every span passes
+  decoded source-identity/kind audit, and repeat/explicit-Reset Builds reproduce
+  identical span+counter fingerprints.
+- Full regression rerun after M3-04 (observed): the ten individual M1/M2 WAD
+  executables re-measured 17/146, 21/152, 34/197, 24/199, 31/191, 33/165, 30/141,
+  39/300, 51/190 and 55/167; their sum is **335 cases / 1,848 assertions**. The
+  earlier report's 375/1,668 aggregate was a manual report arithmetic error only;
+  no suite expectation/production code changed. Before adding the new suites the
+  rerun reproduced the M3-03 baseline exactly: prior synthetic/non-IWAD suites
+  **515 cases / 3,460 assertions / 0 failures** and prior suites including
+  optional owner-IWAD runs **519 cases / 3,585 assertions**. Adding M3-04
+  WC01-WC52 (52/474) and synthetic I01-I03 (3/115) gives the synthetic observed
+  total **570 cases / 4,049 assertions / 0 failures**. Optional owner-IWAD runs
+  add M2 I04 1/19, M3-01 FI04 1/32, M3-02 I04 1/29, M3-03 I04 1/45 and M3-04 I04
+  1/117: combined observed all suites **575 cases / 4,291 assertions / 0
+  failures**. No old suite count/assertion expectation or M3-03 hash was changed.
+- `scripts/test.ps1`: without an IWAD path **116/116 checks pass**; with
+  `-IwadPath` for the legal local IWAD **138/138 checks pass**, including read-only
+  M3-03/M3-04 I04 and `--map-info E1M1/E1M2/E4M1`. `build.sh`/`test.sh` mirror
+  the new flags and Git Bash `bash -n` passes; Linux x64 compilation/runtime
+  remains NOT RUN.
+- Main `src/DoomPB.pb --check` and build exit 0; CLI `--version` still
+  `DoomPB 0.2.0`; unknown option exit 2, missing WAD exit 1 and
+  `--show-title`/`--dump-info` conflict exit 2 behaved unchanged in smoke tests.
 
 ## [0.2.0] - 2026-11-16
 

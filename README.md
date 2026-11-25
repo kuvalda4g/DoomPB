@@ -18,11 +18,16 @@ ticks and WAD compatibility — rather than to reimagine it.
 > `R_PointOnSegSide`) are implemented and tested in the working tree. M3-03 adds
 > a caller-owned fixed camera and a deterministic iterative BSP traversal with an
 > owned chronological `SUBSECTOR`/`SEG` trace: original near-to-far order, no
-> recursion, explicit work stack/event budgets and transactional cleanup. It
-> deliberately does **not** implement `R_CheckBBox`/FOV/solidsegs culling and
-> does **not** render walls, planes or sprites; screen projection, wall clipping/
-> textured columns and the world renderer remain M3-04+. Gameplay, UI and audio
-> are still pending, M3 as a whole is not complete and `v0.3.0` is not prepared.
+> recursion, explicit work stack/event budgets and transactional cleanup. M3-04
+> adds exact `R_InitTextureMapping` `viewangletox`/`xtoviewangle`/`clipangle`
+> tables for the canonical 320-column view, safe owned solid/pass interval
+> clipping, source-faithful `R_AddLine` SOLID/PASS screen-range emission, full
+> `R_CheckBBox` and an online near-to-far walk where the far child is visited only
+> after real occlusion state exists. That output is headless: ordered numeric
+> visible span records/counters, **not** pixels, drawsegs, vertical projection,
+> textured columns, planes or sprites. Drawsegs/one-color column drawing,
+> textured walls and the world renderer remain M3-05+. Gameplay, UI and audio are
+> still pending, M3 as a whole is not complete and `v0.3.0` is not prepared.
 > The application version remains `0.2.0`. Linux x64 runtime is **NOT RUN**. No
 > Git tag exists until the owner creates it.
 
@@ -116,6 +121,15 @@ repository.
 # Build the optional M3-03 real-IWAD BSP tests -> build/DoomPB-M3BspIwadTests.exe
 ./scripts/build.ps1 -BspIwadTest
 
+# Build the M3-04 projection/wall-clipping unit tests -> build/DoomPB-WallClippingTests.exe
+./scripts/build.ps1 -WallClippingTest
+
+# Build the M3-04 synthetic WAD/level/camera/visibility integration tests -> build/DoomPB-M3WallClipTests.exe
+./scripts/build.ps1 -WallClippingIntegrationTest
+
+# Build the optional M3-04 catalog-aware real-IWAD tests -> build/DoomPB-M3WallClipIwadTests.exe
+./scripts/build.ps1 -WallClippingIwadTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -186,6 +200,15 @@ repository.
 # Build the optional M3-03 real-IWAD BSP tests -> build/DoomPB-M3BspIwadTests
 ./scripts/build.sh --bsp-iwad-test
 
+# Build the M3-04 projection/wall-clipping unit tests -> build/DoomPB-WallClippingTests
+./scripts/build.sh --wall-clipping-test
+
+# Build the M3-04 synthetic WAD/level/camera/visibility integration tests -> build/DoomPB-M3WallClipTests
+./scripts/build.sh --wall-clipping-integration-test
+
+# Build the optional M3-04 catalog-aware real-IWAD tests -> build/DoomPB-M3WallClipIwadTests
+./scripts/build.sh --wall-clipping-iwad-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
@@ -199,24 +222,26 @@ composite wall textures, flat/sprite namespaces, vanilla map binaries, map
 loader/cross-reference validation and M2 end-to-end resource/map integration),
 the M3-01 fixed-point suite, the M3-02 BAM angle/exact-table/geometry suite,
 the M3-02 synthetic geometry integration suite, the M3-03 BSP traversal suite
-(B01-B48), its synthetic WAD/level/camera/trace integration (I01-I03) and all
-optional IWAD harnesses (NOT RUN without a supplied path), plus smoke tests
-against the produced executable. They need no game data and no graphical display
-for the synthetic suite; no window is opened by the automated suite without an
-explicit IWAD path. `--show-title` remains an owner/gui interactive check.
+(B01-B48), its synthetic WAD/level/camera/trace integration (I01-I03), the M3-04
+screen-projection/wall-clipping/occlusion suite (WC01-WC52), its synthetic
+WAD/level/camera/online-visibility integration (I01-I03) and all optional IWAD
+harnesses (NOT RUN without a supplied path), plus smoke tests against the
+produced executable. They need no game data and no graphical display for the
+synthetic suite; no window is opened by the automated suite without an explicit
+IWAD path. `--show-title` remains an owner/gui interactive check.
 
 ```powershell
 ./scripts/test.ps1     # Windows; synthetic only, optional IWAD I04 NOT RUN
 
 ./scripts/test.ps1 -IwadPath 'D:\path\to\legally-owned\DOOM.WAD'
-# Windows; adds read-only M3-03 E1M1/E1M2/E4M1 I04 and --map-info CLI checks
+# Windows; adds read-only M3-03 and M3-04 E1M1/E1M2/E4M1 I04 and --map-info CLI checks
 ```
 
 ```bash
 ./scripts/test.sh      # Linux; synthetic only, optional IWAD I04 NOT RUN
 
 IWAD_PATH=/path/to/legally-owned/DOOM.WAD ./scripts/test.sh
-# Linux; adds read-only M3-03 E1M1/E1M2/E4M1 I04 and --map-info CLI checks
+# Linux; adds read-only M3-03 and M3-04 E1M1/E1M2/E4M1 I04 and --map-info CLI checks
 ```
 
 A test run fails with a non-zero exit code if any check fails.
@@ -598,9 +623,11 @@ counts and stable metadata checksums. The IWAD is never modified, and no game
 content or reconstructed images are written.
 
 Known limitations at `0.2.0`: single-WAD operation, no PWAD overlay support, no
-generic `LumpCache` or renderer-side column cache, no world rendering or
-gameplay, and no Linux runtime validation. `F_SKY1` is accepted as an ordinary
-flat for resource binding; sky rendering belongs to M4.
+generic `LumpCache` or renderer-side column cache, no drawseg/column/plane/sprite
+drawing or gameplay, and no Linux runtime validation. M3-04 publishes headless
+visible wall-column interval records only; it does not paint a frame or claim
+textured walls. `F_SKY1` is accepted as an ordinary flat for resource binding;
+sky rendering belongs to M4.
 
 ## Fixed camera and deterministic BSP traversal (M3-03)
 
@@ -663,6 +690,121 @@ BspTraceLastError()
   clipping, drawsegs and a faithful `R_CheckBBox` belong to later M3-04 work.
 - `DoomPB.pb` includes the modules for compile coverage only; ordinary startup
   does not load a map, create a camera or start rendering traversal.
+
+## Screen projection and visible wall intervals (M3-04)
+
+`src/Renderer/Projection.pbi` computes the original `R_InitTextureMapping`
+tables once from the pinned `finetangent` data for the canonical 320-column
+logical view:
+
+```text
+ProjectionInitClassic(*Projection)
+ProjectionReset(*Projection)
+ProjectionIsValid(*Projection)
+ProjectionGetConstants(*Projection, *Width, *Height, *CenterX, *CenterY,
+                       *CenterXFixed, *CenterYFixed, *ProjectionFixed,
+                       *FocalLength, *FieldOfView)
+ProjectionGetViewAngleToX(*Projection, FineIndex, *X)
+ProjectionGetPreViewAngleToX(*Projection, FineIndex, *X)
+ProjectionGetXToViewAngle(*Projection, ScreenX, *RawAngle.Quad)
+ProjectionGetClipAngle(*Projection, *RawAngle.Quad)
+ProjectionGetTableCounts(*Projection, *ForwardCount, *InverseCount, *PreCount)
+ProjectionLastError()
+```
+
+- Immutable owned tables: 4096 normalized `viewangletox`, 4096 retained
+  pre-fencepost entries for diagnostics and 321 `xtoviewangle`; explicit checked
+  4096/321 indexes and the original 320/200/160/100/centerfocal constants.
+- `clipangle` is `xtoviewangle[0]` as a raw unsigned BAM `.q` value; no floating
+  tangent/degrees projection, no renderer globals and no per-frame table rebuild.
+
+`src/Renderer/ClipSegs.pbi` owns bounded solid/pass screen interval state:
+
+```text
+ClipStateBeginFrame(*ClipState, Width)
+ClipStateReset(*ClipState)
+ClipSolidSegment(*ClipState, First, Last, Subsector, Seg, Linedef, Side,
+                 FrontSector, BackSector)
+ClipPassSegment(...same...)
+ClipStateGetRange / ClipStateGetSpan / ClipStateGetStats / ClipStateIsValid
+```
+
+- Inclusive columns and the original emission order are reproduced.
+- Two fixed sentinels never move; the original sentinel extension/deletion is
+  replaced by checked real-post insertion and compaction between them. The
+  screen-domain emitted subspans/coverage are identical; only private storage
+  representation differs. Tiny widths 1..320 are independently tested.
+- Every operation pre-reserves growth/caps and is transactional: a bad range or
+  allocation leaves ranges/spans unchanged. Caps: width 320, 1024 real posts and
+  1,000,000 published spans.
+
+`src/Renderer/WallVisibility.pbi` connects projection, clipping, source identity
+and the online BSP walk:
+
+```text
+WallVisibilityBuild(*Level.MapLevel, *Camera.BspCamera, *Projection.Projection,
+                    *Flats.FlatCatalog, *Textures.TextureCatalog,
+                    *Result.WallVisibilityResult)
+WallVisibilityAddLine(...same ownership..., *ClipState, Subsector, Seg,
+                      *Outcome, *Emitted)
+WallCheckBBoxCore(*Level, *Projection, *Clip, NodeIndex, BoxIndex, X, Y,
+                  HeadingRaw, *Verdict)
+WallBoxPosition(CameraX, CameraY, Top, Bottom, Left, Right,
+                *BoxX, *BoxY, *BoxPos)
+WallVisibilityGetSpan(...),
+WallVisibilityGetStats(21 aggregate counters),
+WallVisibilityCount/IsValid/Reset/LastError
+```
+
+- `R_AddLine` source order and EXACT unsigned 32-bit angles/wrap are preserved:
+  strong backface `span>=ANG180`; strong left/right two-clipangle checks; exact
+  `viewangletox` columns; inclusive `[x1,x2-1]`; backface/FOV/zero-width/empty
+  rejects classified before SOLID/PASS clipping.
+- One-sided and closed-door walls are SOLID; unequal floor/ceiling planes or
+  other two-sided differences are PASS; identical planes+light and an absent
+  middle texture are the original non-publishing empty trigger line. Heights use
+  signed map units exactly as original monotonic comparisons.
+- Identity: with decoded catalogs the original resolved flat/texture equality and
+  `midtexture==0` semantics are reproduced (including the first-texture-index-0
+  quirk). Without catalogs only an already validated map's canonical raw
+  eight-byte comparison is used; malformed/flat/middle slots cannot falsely make
+  an opaque wall transparent or invent a catalog index.
+- Full `R_CheckBBox`: `boxpos=(boxy<<2)+boxx`, box-inside/tie/checkcoord corner
+  selection, camera-relative angles, live solidsegs range scan. The unreachable
+  C placeholder/trailing rows are encoded for test coverage but if ever requested
+  return conservative VISIBLE/UNKNOWN, never a degenerate hidden verdict.
+- Online near-first walk: explicit checked stack; a node's far bbox is tested only
+  after the complete near subtree updates occlusion. OCCLUDED prunes only the far
+  visit; `OcclusionSkips` counts far subtree pruning distinctly from M3-03's
+  always-zero cull-free counter. Caps: 4,000,000 work items, 1,000,000 spans.
+- `WallVisibilityResult` deep-copies ordered `WallSpan` records
+  (`Subsector/Seg/Linedef/Side/Front/Back/FirstX/LastX/Solid|Pass`) and every
+  counter; it never retains map/catalog/camera/clip pointers and survives
+  `MapLevelReset`/`WADClose`. Failure leaves a valid empty result and diagnostics;
+  map/camera/projection owners remain intact.
+- Counter semantics: `SolidCandidates`/`PassCandidates` are each processed seg's
+  `R_AddLine` SOLID/PASS **classification outcomes**, not visible span records.
+  A candidate can emit zero fragments when its interval is already fully covered,
+  or multiple uncovered fragments when live occlusion clips it. `EmittedFragments`
+  always equals the `WallSpan` count; candidates plus all reject outcome classes
+  (empty/backface/FOV/zero-width) reconcile `ProcessedSegs`. Owner M3-04 examples:
+  E1M1 23/15 candidates -> 35 spans; E1M2 42/33 -> 54; E4M1 26/55 -> 69 (candidate
+  totals exceed spans because fully covered candidates emit nothing).
+
+M3-04 **does not draw**: it publishes headless numeric screen-column intervals
+and visibility counters, not a framebuffer, `drawsegs`, vertical wall projection,
+column stepping/textures, planes, sky, sprites or screenshots. Ordinary startup
+does not load a map or run this traverse (`DoomPB.pb` includes modules for compile
+coverage only).
+
+Test/owner evidence at this increment (Windows x64, PureBasic 6.41): WC01-WC52
+52 cases / 474 assertions / 0 failures; synthetic I01-I03 3/115/0; optional
+owner-IWAD I04 1/117/0. Owner E1M1: online 49 nodes / 32 leaves / 103 segs / 35
+spans, 18 occlusion skips, span FNV `74B485154CE29B0B`; E1M2: 69/42/151/54, 28
+skips, `8AC0627513C4B619`; E4M1: 49/40/159/69, 10 skips, `9FD0B15A0F33197E`.
+All three maps live-pruned a far subtree and every span matched decoded source
+identity/kind; repeated/Reset builds were identical; the IWAD stayed unchanged
+(12,408,292 bytes, MD5 `c4fe9fd920207691a9f493668e0a2083`).
 
 ## Framebuffer and presentation
 

@@ -10,7 +10,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
 | M2 - Resources and map loading | complete on Windows x64; `v0.2.0` prepared | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`, M2-05 as `2fb2481`, M2-06 as `2f170c1`; M2-07 integration/version changes are in the working tree pending owner commit/tag; renderer pending; Linux x64 NOT RUN |
-| M3 - Geometry and first walls | in progress: M3-01, M3-02 and M3-03 | signed 16.16 math (M3-01), BAM angles/tables/geometry primitives (M3-02) and deterministic fixed-camera BSP traversal/trace (M3-03) implemented and tested in the working tree; screen projection, wall clipping/textured rendering and real `R_CheckBBox` occlusion remain later M3 steps; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
+| M3 - Geometry and first walls | in progress: M3-01, M3-02, M3-03 and M3-04 | signed 16.16 math (M3-01), BAM angles/tables/geometry primitives (M3-02), deterministic fixed-camera BSP traversal/trace (M3-03) and exact 320-column projection + headless solid/pass wall clipping + source-faithful `R_AddLine` visibility + full `R_CheckBBox` online occlusion (M3-04) implemented and tested in the working tree; `drawsegs`/vertical projection/textured walls/planes remain M3-05+; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -1432,6 +1432,211 @@ Milestone/limits note: M3-03 implements BSP traversal only. Screen projection,
 `R_InitTextureMapping`/viewangletox, solid wall clipping, drawsegs, textured
 columns, `R_CheckBBox` occlusion and `v0.3.0` are **not** complete. Application
 version remains `0.2.0`; no tag/commit was created by this task.
+
+## M3-04 — screen projection, wall clipping and online occlusion
+
+Original C symbols consulted (same pinned revision
+`a77dfb96cb91780ca334d0d4cfd86957558007e0`, local `../doom-original/linuxdoom-1.10`):
+
+- `r_main.c`: `R_InitTextureMapping` (`focallength`, `viewangletox[4096]`,
+  `xtoviewangle[viewwidth+1]`, `clipangle`), `FIELDOFVIEW 2048`/`FINEANGLES 8192`/
+  `ANGLETOFINESHIFT 19`, `R_ExecuteSetViewSize` full-view defaults
+  (`viewwidth=320`, `viewheight=200`, `centerx=160`, `centery=100`,
+  `centerxfrac=160*FRACUNIT`, `projection=centerxfrac`), tangents/FixedMul/
+  FixedDiv and the xtoviewangle bounded scan.
+- `r_bsp.c`: `R_ClearClipSegs`, `R_ClipSolidWallSegment`, `R_ClipPassWallSegment`,
+  `R_AddLine`, `R_CheckBBox` (including `checkcoord[12][4]`), `R_Subsector`,
+  `R_RenderBSPNode`; `solidsegs`/`newend`, `MAXSEGS 32` sentinels and crunches.
+- `r_state.h`: `viewangletox`, `xtoviewangle`, `clipangle`, `solidsegs`.
+- `r_defs.h`: `cliprange_t {first,last}`, `node_t` fixed origin/direction and
+  `bbox[2][4] {TOP,BOTTOM,LEFT,RIGHT}`, `seg_t` `v1/v2`, `sidedef`, `linedef`,
+  `frontsector`, `backsector`, `subsector_t` sector/numlines/firstline.
+- `r_main.h`/`tables.c`: `FINEANGLES`, `FINEMASK`, `ANGLETOFINESHIFT`, exact
+  `finetangent` source data reused by the existing `TrigTables.pbi`.
+- `p_mobj.c`: `P_SpawnPlayer` heading rule
+  `ANG45*(mthing->angle/45)` reused only by the optional I04 camera selection.
+  No gameplay/movement/input was ported.
+- `doomdata.h`: unsigned node child encoding `NF_SUBSECTOR $8000`, `$7FFF` leaf
+  mask and SHORT bbox/seg/sector map fields, already reused by M2/M3.
+
+Port mapping:
+
+- `src/Renderer/Projection.pbi`:
+  - `ProjectionInitClassic` reproduces the original operation order: focal
+    `FixedDiv(centerxfrac, finetangent[3072])`, 4096 tangent fenceposts with
+    strict `>2*FRACUNIT`/`<-2*FRACUNIT` sentinel values and
+    `(centerxfrac-t+FRACUNIT-1)>>FRACBITS` ceil/clamp, bounded normalized scan,
+    then `clipangle=xtoviewangle[0]` as a raw `.q` unsigned BAM value.
+  - Owned normalized 4096 table plus retained pre-fencepost 4096 table and 321
+    inverse entries; immutable for reuse, idempotent reset, transactional Init.
+  - Public checked accessors `ProjectionGetViewAngleToX/PreViewAngleToX/
+    XToViewAngle/ClipAngle/Constants/TableCounts`; no global renderer arrays.
+- `src/Renderer/ClipSegs.pbi`:
+  - `ClipStateBeginFrame` reproduces `R_ClearClipSegs` inclusive posts
+    `[-0x7FFFFFFF,-1]`, `[viewwidth,+0x7FFFFFFF]` and drawable domain
+    `0..viewwidth-1`.
+  - `ClipSolidSegment` reproduces the original scan/order: uncovered left-to-right
+    subspans are published before the solid interval expands/merges posts; later
+    walls cannot re-emit covered pixels. `ClipPassSegment` publishes uncovered
+    subspans without modifying occlusion.
+  - Owned checked ranges/spans instead of C fixed `solidsegs` and pointers:
+    initial capacity 4/64, doubling growth, 1024 range / 1,000,000 span caps;
+    every index, capacity, byte budget and inclusive domain is checked.
+- `src/Renderer/WallVisibility.pbi`:
+  - `R_AddLine` order preserved exactly: `angle1=R_PointToAngle(v1)`,
+    `angle2=R_PointToAngle(v2)`, unsigned `span=angle1-angle2`, strong backface
+    `span>=ANG180`, `rw_angle1` only as consumed context, unsigned
+    `angle -= viewangle`; strong left `tspan=angle1+clipangle > 2*clipangle` then
+    adjusted `tspan>=span` reject else `angle1=clipangle`; strong right
+    `tspan=clipangle-angle2 > 2*clipangle` then same reject else
+    `angle2=-clipangle`; fine indexes `(angle+ANG90)>>19`; x1/x2
+    `viewangletox` access; `x1==x2` no-op; inclusive `[x1,x2-1]`.
+  - Left/right branches and exact tie boundaries are factored public checked
+    helpers `WallApplyLeftClip`/`WallApplyRightClip`, tested independently.
+  - Classification order: missing back sector -> SOLID; back ceiling <= front
+    floor or back floor >= front ceiling -> SOLID closed door; unequal planes ->
+    PASS; equal planes+light with catalog-aware/resolved identical flats and
+    `midtexture==0` -> original non-publishing empty trigger skip; otherwise PASS.
+    Heights use signed map-unit LONG comparisons exactly (original values are
+    FRACUNIT multiples; no invented fixed arithmetic).
+  - Optional decoded `FlatCatalog`/`TextureCatalog` route reproduces the original
+    resolved index equality including first-texture-index-0 absence quirk. On a
+    structurally validated map without catalogs, a narrow canonical raw 8-byte
+    comparison is used; malformed flat slot -> not identical (conservative PASS)
+    and malformed middle slot -> present (conservative PASS), so no false
+    transparency or invented catalog index.
+  - `R_CheckBBox`: `boxx <=left / <right / else`, `boxy >=top / >bottom / else`,
+    `boxpos=(boxy<<2)+boxx`, boxpos 5 visible; exact corner indexes per row;
+    camera-relative BAM angles; `span>=ANG180` conservative visible; same
+    clipangle strict branches; `viewangletox` columns; `sx2--`, live post scan.
+    Exact checkcoord bytes for all 12 rows; unreachable placeholder/trailing rows
+    return UNKNOWN/VISIBLE rather than the original degenerate zero-corner cull.
+  - Online walk: bounded explicit LIFO stack; node far `R_CheckBBox` is scheduled
+    beneath the near child and runs only after all near segs updated live posts;
+    OCCLUDED prunes the far visit, VISIBLE/UNKNOWN pushes it. Result owns deep-
+    copied ordered `WallSpan` records and distinct counters.
+- `src/DoomPB.pb`: compile-only includes Projection/ClipSegs/WallVisibility.
+  Ordinary CLI/startup still does not load a map or run this traverse.
+
+Deviations from original C (intentional safety/diagnostic, all documented):
+
+- The original `viewangletox` ends normalized in place and has no separate
+  pre-fencepost copy. DoomPB keeps both owned tables: the public one is normalized
+  byte-for-byte, the pre copy is diagnostic-only; no observable lookup changes.
+- Original `solidsegs` sentinel extension/deletion and `goto crunch` pointer
+  compaction are replaced by checked real-post insertion/consolidation between
+  two fixed sentinels. Emitted subspans/order and screen-domain union coverage are
+  identical; only private container representation differs. Tiny widths 1..320
+  are support/test scope for the interval module; the production shim requires
+  320.
+- Original C trusts `viewangletox` indexes, malformed bboxes, textures/flats and
+  pointers. DoomPB validates every index/range and returns explicit diagnostics.
+  Fixed conversion/table/camera-relative uncertainty in `R_CheckBBox` falls back
+  conservatively to VISIBLE/UNKNOWN and is counted, never silently culls geometry.
+- Catalog-aware identity is the preferred original route; canonical raw fallback
+  is conservative and cannot infer any texture/flat number. This is a documented
+  resource-availability adaptation, not approximate physics/render math.
+- C recursion is replaced by an explicit stack; the observed online leaf/seg
+  chronology, near-before-far and occlusion timing are published in this order
+  and independently oracle-tested. M3-03's separate cull-free `BspTraceBuild` is
+  unchanged.
+- M3-04 does not `R_StoreWallRange`, emit `drawsegs`, compute vertical wall
+  projection, step textured columns, build visplanes, render sky/sprites/COLORMAP
+  pixels or write a framebuffer. It is headless numeric screen-column visibility.
+
+Verified behaviour (Windows x64, PureBasic 6.41):
+`PureBasic 6.41 (Windows - x64) - (c) 2026 Fantaisie Software`.
+
+- Projection fixture oracle (`scripts/gen_projection_golden.py`, pinned
+  `tables.c`): all 4096 normalized `viewangletox`, all 4096 pre-fencepost and all
+  321 `xtoviewangle` entries verified; focal length `10477766` (`0x9FE0C6`),
+  clipangle `0x20080000`; FNV-1a64 normalized `F45B52285F25D5DF`, pre
+  `EAE596370F96286A`, inverse `4EC83D702DA4CD32`. Operation reuses the canonical
+  projection once and does not mutate tables per frame.
+- `tests/unit/wall_clipping_tests.pb`: WC01-WC52, **52 cases / 474 assertions / 0
+  failures**. Independent reference `R_AddLine`, clip bitmap/interval oracle and
+  recursive online walker oracles; strict left/right ties, all checkcoord bytes/
+  reachable boxpos, 16 disjoint-column growth, 70 PASS emissions, deterministic
+  150-op frame, catalog-aware/fallback identity, zero-node root, corrupt edge/DAG/
+  budget failures, result lifetime/reset/recovery and counter reconciliation.
+  No commercial data or pixels are involved.
+- `tests/integration/m3_wall_clip_tests.pb`: I01-I03, **3 cases / 115 assertions /
+  0 failures**. Fresh synthetic ten-lump PWADs through real WAD/MapLevel APIs.
+  I01 two-leaf SOLID `[0,319]` fingerprint `60A24EC7D48916B4`; I02 unchanged
+  cull-free quad chronology versus M3-04 SOLID occlusion `5EEDC66C4BB96932` and
+  four PASS `[0,319]` fragments in 3,2,1,0 order `6CD6B90817A62A89`; I03 A->B->A
+  reload/direction change (ANG180 wrapped left candidate `[177,319]`
+  `874812E8D8EFE267`)/Reset/repeat and corrupted-root-edge transactional failure
+  then restored-edge original fingerprint.
+- `tests/integration/m3_wall_clip_iwad_tests.pb`: without path I04 **NOT RUN**
+  exit 0. With owner Ultimate Doom 1.9ud (`data/DOOM.WAD`, read-only):
+  **1 case / 117 assertions / 0 failures**, file size 12,408,292 and MD5
+  `c4fe9fd920207691a9f493668e0a2083` unchanged before/after. Decoded PNAMES 351,
+  textures 287 (resolved), flats 111; one 320x200 center 160,100 projection.
+  Player-one THING cameras; cull-free cross-check totals reused (E1M1 238 nodes/
+  239 leaves/747 segs; E1M2 447/448/1,463; E4M1 195/196/695) with zero trace
+  occlusion. Online catalog-aware:
+  - E1M1: 35 spans / 49 nodes / 32 leaves / 103 segs; candidates 23/15; backface
+    41, FOV left/right 24/0, zero-width 0, empty 0; bboxes 31/18/0; growth 1/0,
+    allocations 5, work 260; span FNV `74B485154CE29B0B`; counters
+    `7ADB45DBF2611B77`.
+  - E1M2: 54 / 69 / 42 / 151; candidates 42/33; backface 62, FOV 9/0,
+    zero-width 5; bboxes 41/28/0; growth 1/0, allocations 5, work 360; span FNV
+    `8AC0627513C4B619`; counters `83CAB0E1049B850A`.
+  - E4M1: 69 / 49 / 40 / 159; candidates 26/55; backface 65, FOV 2/0,
+    zero-width 10, empty 1; bboxes 39/10/0; growth 1/1, allocations 6, work 276;
+    span FNV `9FD0B15A0F33197E`; counters `CCAA2442EB270717`.
+  Every span matched decoded seg/line/side/front sector and recomputed
+  catalog-aware SOLID/PASS kind; all online passes reported positive live
+  occlusion and fewer leaves than cull-free; duplicate/Reset Builds identical;
+  no coordinates, WAD payloads, textures, graphics or screenshots printed/stored.
+- Counter semantics: `SolidCandidates`/`PassCandidates` count each processed
+  seg's R_AddLine SOLID/PASS classification outcomes, **not** `WallSpan` records.
+  Depending on live occlusion a candidate emits 0..n uncovered inclusive
+  fragments, following original ClipSolid/PASS order. `EmittedFragments` equals
+  the published span count; candidates plus every reject outcome class
+  (empty/backface/FOV/zero-width) reconcile `ProcessedSegs`. Owner counters do
+  not equate candidates with spans: E1M1 23/15 -> 35 spans; E1M2 42/33 -> 54;
+  E4M1 26/55 -> 69 (fully covered candidates emit no fragment).
+- Full regression rerun after M3-04 (observed, not predicted):
+  - the ten individual M1/M2 WAD executable outputs re-measured 17/146, 21/152,
+    34/197, 24/199, 31/191, 33/165, 30/141, 39/300, 51/190 and 55/167; their
+    column sum is **335 cases / 1,848 assertions / 0 failures**, matching the
+    M2-07 task baseline. The earlier M3-04 final report's 375/1,668 aggregate was
+    a manual transcription/arithmetic error in the report only (not in any suite
+    output, expected total or saved docs); it is corrected here without changing
+    suite expectations or production code.
+  - the actual rerun before adding the new suites reproduced the M3-03 baseline
+    exactly: prior synthetic/non-IWAD suites at **515 cases / 3,460 assertions /
+    0 failures**, and prior suites including optional owner-IWAD runs at **519
+    cases / 3,585 assertions**. All prior suite executables ran green; no old
+    expected suite count/assertion or trace hash was weakened or rewritten.
+  - adding M3-04 WC01-WC52 (52/474) and synthetic I01-I03 (3/115) gives **570
+    cases / 4,049 assertions / 0 failures**.
+  - optional owner-IWAD runs: M2 I04 1/19, M3-01 FI04 1/32, M3-02 I04 1/29,
+    M3-03 I04 1/45 and M3-04 I04 1/117; combined observed **575 cases / 4,291
+    assertions / 0 failures**.
+  - `scripts/test.ps1`: without an owner path **116/116 checks pass**; with
+    `-IwadPath <legal IWAD>` (read-only M3-03/M3-04 I04 and `--map-info`
+    E1M1/E1M2/E4M1 CLI checks) **138/138 checks pass**.
+  - `build.sh`/`test.sh` mirror the new targets/optional I04; Git Bash `bash -n`
+    returned 0 for both. Linux x64 compilation/runtime remains **NOT RUN**.
+  - Main `src/DoomPB.pb --check` and build exit 0; `--version` remains
+    `DoomPB 0.2.0`; existing smoke diagnostics/exit codes unchanged.
+- Documentation lookup: **Context7 USED**. Real MCP calls resolved
+  `/websites/purebasic` and returned official-doc-derived snippets for structure
+  pointer fields, `SizeOf`, `PokeL`/`PokeQ` and memory allocation/free behavior.
+  Official local `PureBasic.chm` plus disposable real compiler probes were
+  fallbacks for comparisons in `Check(...)`, typed pointer alignment of the
+  21-output stats call and unsigned `.q` angle transport. The pinned C source
+  remained authoritative for Doom algorithms; Context7 was not used to override
+  engine semantics.
+
+Milestone/limits note: M3-04 completes only headless projection/clipping/visibility
+integration; `R_StoreWallRange`, `drawsegs`, vertical wall projection, textured/
+single-color column drawing, planes, sky/sprites, a framebuffer frame hash and
+`v0.3.0` are **not** complete. Application version remains `0.2.0`; no tag/commit
+was created by this task.
 
 ## Compatibility conventions adopted so far
 

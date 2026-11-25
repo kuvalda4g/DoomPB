@@ -90,6 +90,18 @@
     Build the optional M3-03 real-IWAD deterministic BSP integration test program
     (tests/integration/m3_bsp_iwad_tests.pb) instead of the main executable.
 
+.PARAMETER WallClippingTest
+    Build the M3-04 screen-projection/wall-clipping/occlusion unit test program
+    (tests/unit/wall_clipping_tests.pb) instead of the main executable.
+
+.PARAMETER WallClippingIntegrationTest
+    Build the M3-04 synthetic WAD/level/camera/visibility integration test program
+    (tests/integration/m3_wall_clip_tests.pb) instead of the main executable.
+
+.PARAMETER WallClippingIwadTest
+    Build the optional M3-04 real-IWAD projection/wall-clipping integration test
+    program (tests/integration/m3_wall_clip_iwad_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -153,6 +165,15 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -BspIwadTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -WallClippingTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -WallClippingIntegrationTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -WallClippingIwadTest
 #>
 [CmdletBinding()]
 param(
@@ -176,6 +197,9 @@ param(
     [switch]$BspTest,
     [switch]$BspIntegrationTest,
     [switch]$BspIwadTest,
+    [switch]$WallClippingTest,
+    [switch]$WallClippingIntegrationTest,
+    [switch]$WallClippingIwadTest,
     [string]$CompilerPath = ''
 )
 
@@ -205,12 +229,24 @@ if ($GeometryIwadTest) { $selectedTargets++ }
 if ($BspTest) { $selectedTargets++ }
 if ($BspIntegrationTest) { $selectedTargets++ }
 if ($BspIwadTest) { $selectedTargets++ }
+if ($WallClippingTest) { $selectedTargets++ }
+if ($WallClippingIntegrationTest) { $selectedTargets++ }
+if ($WallClippingIwadTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($BspIwadTest) {
+if ($WallClippingIwadTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_wall_clip_iwad_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3WallClipIwadTests.exe'
+} elseif ($WallClippingIntegrationTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_wall_clip_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3WallClipTests.exe'
+} elseif ($WallClippingTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\wall_clipping_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-WallClippingTests.exe'
+} elseif ($BspIwadTest) {
     $sourceFile = Join-Path $repoRoot 'tests\integration\m3_bsp_iwad_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-M3BspIwadTests.exe'
 } elseif ($BspIntegrationTest) {

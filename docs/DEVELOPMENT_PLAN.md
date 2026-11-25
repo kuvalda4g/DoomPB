@@ -272,26 +272,31 @@ Linux x64 — **NOT RUN**. Коммит/тег `v0.2.0` создаёт влад�
 **Основные модули:** `Fixed.pbi`, `Geometry.pbi`, `BSP.pbi`, `Segs.pbi`, `Draw.pbi`, `RenderMain.pbi`.
 
 - [x] Перенести fixed-point операции и необходимые lookup/trigonometry tables (M3-01/M3-02, Windows x64).
-- [ ] Реализовать преобразования мировых координат в экранные и расчёт углов (углы/расстояния M3-02 готовы; screen/FOV остаются).
+- [x] Реализовать точную экранную горизонтальную проекцию и FOV-углы: `R_InitTextureMapping`, `viewangletox`/`xtoviewangle`/`clipangle` M3-04 для канонического 320-column viewport; полная вертикальная wall projection остаётся M3-05.
 - [x] Создать камеру с заданной позицией и направлением (M3-03 `BspCamera`,
       signed 16.16 X/Y и raw unsigned BAM heading).
-- [x] Перенести обход BSP дерева с правильным порядком near-to-far (M3-03; без
-      screen-projection/`R_CheckBBox` occlusion).
-- [ ] Реализовать solid wall clipping, drawsegs и отрисовку одноцветных колонок.
+- [x] Перенести обход BSP дерева с правильным порядком near-to-far (M3-03 cull-free
+      trace; M3-04 добавляет real `R_CheckBBox` occlusion и online culling без
+      изменения старого trace behavior).
+- [x] Реализовать headless solid/pass wall clipping с inclusive интервалами,
+      owned solidsegs-эквивалентом и реальным occlusion state (M3-04).
+- [ ] Реализовать `drawsegs`, вертикальную wall projection и отрисовку одноцветных колонок (M3-05+; M3-04 публикует только экранные интервалы/счётчики).
 - [ ] Добавить верхние/нижние/middle wall textures и clipping по экрану.
 - [ ] Сравнивать результирующие frame hashes / изображения с эталонной сборкой при одинаковых позициях камеры.
 - [ ] Замерять время CPU на кадр и отсутствие лишних аллокаций внутри горячего цикла.
 
 **Критерий готовности:** из фиксированной камеры в E1M1 видны **правильно расположенные и текстурированные стены** без заметных геометрических артефактов; можно воспроизвести один и тот же кадр.
 
-**Статус (18 ноября 2026):** M3 не завершён. M3-01 fixed-point, M3-02 BAM
-углы/точные trig-tables/geometry primitives и M3-03 детерминированный обход BSP
-дерева из fixed camera с owned `SUBSECTOR`/`SEG` trace реализованы и
-протестированы на Windows x64 (PB 6.41) в рабочем дереве. M3-03 сознательно не
-выполняет `R_CheckBBox`/occlusion culling и не является visible-surface
-списком: экранная проекция, wall clipping/drawsegs, текстурированные стены и
-real `R_CheckBBox` остаются следующими шагами M3/M3-04+. Версия остаётся
-`0.2.0`; `v0.3.0` не подготовлен; Linux x64 — NOT RUN.
+**Статус (25 ноября 2026):** M3 не завершён. M3-01 fixed-point, M3-02 BAM
+углы/точные trig-tables/geometry primitives, M3-03 детерминированный обход BSP
+дерева из fixed camera с owned `SUBSECTOR`/`SEG` trace и M3-04 точная 320-column
+проекция, headless solid/pass interval clipping, source-faithful `R_AddLine`
+SOLID/PASS screen spans, полный `R_CheckBBox` и online near-first occlusion walk
+реализованы и протестированы на Windows x64 (PB 6.41) в рабочем дереве.
+M3-04 публикует только owned числовые экранные интервалы/счётчики и не рисует
+пиксели, `drawsegs` или текстурированные стены; vertical projection/drawsegs,
+одноцветные/текстурированные колонки, planes и полный world renderer остаются
+M3-05+. Версия остаётся `0.2.0`; `v0.3.0` не подготовлен; Linux x64 — NOT RUN.
 
 ### M4 — Полный программный рендерер (`v0.4.0`)
 
