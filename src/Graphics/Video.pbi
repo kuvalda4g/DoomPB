@@ -137,7 +137,7 @@ EndProcedure
 
 ; Shows the framebuffer in a centered window and blocks until the user closes
 ; it. All window/image/RGBA resources are released on every path.
-Procedure.i VideoShowFramebuffer(*FrameBuffer.FrameBuffer, *Palette.PaletteSet, Scale.i = #VIDEO_DefaultScale)
+Procedure.i VideoShowFramebuffer(*FrameBuffer.FrameBuffer, *Palette.PaletteSet, Scale.i = #VIDEO_DefaultScale, Title.s = #VIDEO_WindowTitle)
   Protected outputWidth.q
   Protected outputHeight.q
   Protected rgbaBytes.q
@@ -182,7 +182,7 @@ Procedure.i VideoShowFramebuffer(*FrameBuffer.FrameBuffer, *Palette.PaletteSet, 
 
   ; #PB_Window_InnerCoordinate makes the requested size the client area, so the
   ; 3x image is not reduced by the window border.
-  window = OpenWindow(#PB_Any, 0, 0, outputWidth, outputHeight, #VIDEO_WindowTitle,
+  window = OpenWindow(#PB_Any, 0, 0, outputWidth, outputHeight, Title,
                       #PB_Window_SystemMenu | #PB_Window_ScreenCentered | #PB_Window_InnerCoordinate)
   If window = 0
     VideoSetError("Cannot open the presentation window.")

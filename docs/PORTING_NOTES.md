@@ -10,7 +10,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
 | M2 - Resources and map loading | complete on Windows x64; `v0.2.0` prepared | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`, M2-05 as `2fb2481`, M2-06 as `2f170c1`; M2-07 integration/version changes are in the working tree pending owner commit/tag; renderer pending; Linux x64 NOT RUN |
-| M3 - Geometry and first walls | in progress: M3-01, M3-02, M3-03 and M3-04 | signed 16.16 math (M3-01), BAM angles/tables/geometry primitives (M3-02), deterministic fixed-camera BSP traversal/trace (M3-03) and exact 320-column projection + headless solid/pass wall clipping + source-faithful `R_AddLine` visibility + full `R_CheckBBox` online occlusion (M3-04) implemented and tested in the working tree; `drawsegs`/vertical projection/textured walls/planes remain M3-05+; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
+| M3 - Geometry and first walls | in progress: M3-01, M3-02, M3-03, M3-04 and M3-05 | signed 16.16 math (M3-01), BAM angles/tables/geometry primitives (M3-02), deterministic fixed-camera BSP traversal/trace (M3-03), exact 320-column projection + headless solid/pass wall clipping + source-faithful `R_AddLine` visibility + full `R_CheckBBox` online occlusion (M3-04), and checked static viewz + `R_StoreWallRange`/`R_ScaleFromGlobalAngle` vertical projection + 12-bit interpolation + transactional 320x200 solid-debug-tier frame and opt-in preview (M3-05) implemented and tested in the working tree; textured/masked wall columns, COLORMAP lighting, complete `drawseg_t`, planes/sky/sprites remain M3/M4; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -1637,6 +1637,222 @@ integration; `R_StoreWallRange`, `drawsegs`, vertical wall projection, textured/
 single-color column drawing, planes, sky/sprites, a framebuffer frame hash and
 `v0.3.0` are **not** complete. Application version remains `0.2.0`; no tag/commit
 was created by this task.
+
+## M3-05 — vertical wall projection and solid debug-tier frame
+
+Original upstream: Linux Doom 1.10 at pinned commit
+`a77dfb96cb91780ca334d0d4cfd86957558007e0`. Consulted algorithms: `r_segs.c`
+`R_StoreWallRange`, `R_ScaleFromGlobalAngle`, `R_RenderSegLoop`; `r_main.c`
+`R_SetupFrame` view fields, `R_PointInSubsector`, `R_ClearPlanes`
+ceilingclip/floorclip and `R_RenderPlayerView` orchestration; `r_bsp.c`
+`R_Subsector`/`R_AddLine`/`R_CheckBBox` through unchanged M3-04 output;
+`p_mobj.c` `P_SpawnPlayer` heading; `p_local.h` `VIEWHEIGHT`.
+
+- Correspondence added in the working tree:
+  - `src/Renderer/WallView.pbi` — caller-owned `BspCamera` plus checked signed
+    16.16 `ViewZ` derived from a map-unit floor as `floor<<16 + 41*FRACUNIT`;
+    transactional explicit fixed/map-unit setters and idempotent reset.
+  - `src/Renderer/WallProject.pbi` — `WallSegRawAngleToBamChecked`,
+    `WallSegNormalAngleChecked`, `WallAngleOffsetChecked`,
+    `WallDistanceAngleChecked`, `WallSegPointDistanceChecked`,
+    `WallSignedSineIndexChecked`, `WallScaleFromSinesChecked`,
+    `WallScaleFromGlobalAngleChecked`, `WallScaleStepChecked`,
+    `WallProjectSpanChecked`; per-span `WallSpanPlan` owns numeric copies only.
+  - `src/Renderer/WallDraw.pbi` — checked 320+320 `ceilingclip`/`floorclip`
+    arrays (`WallVerticalClipBegin`), caller-owned tally, `WallDrawSolidColumn`,
+    `WallDrawSpan`, exact 64,000-byte `WallFrameHash64` and canonical
+    `WallFrameHashHex64`.
+  - `src/Renderer/RenderMain.pbi` — `WallPlayerSubsectorChecked`,
+    `WallRenderPlayerStartView`, transactional `WallRenderFrame`, read-only
+    `WallRenderGetStats`/`WallRenderGetHashText`/`WallRenderGetPlan`; consumes the
+    M3-04 span list as sole authority and never re-runs BSP/clipping/sorting.
+  - `src/Graphics/Video.pbi` — presentation helper accepts optional
+    `Title.s`; the existing default `#VIDEO_WindowTitle`/TITLEPIC route is
+    unchanged, and `--show-walls` supplies its own canonical window title.
+  - `src/DoomPB.pb` — opt-in `--iwad <path> --show-walls <ExMy>` loads catalogs,
+    the validated map, one static player-start view, M3-04 visibility and one
+    complete frame, prints coarse counters/hash then presents it at 3x. Existing
+    `--show-title`, `--map-info`, `--lump-info`, `--dump-info`, `--version`,
+    `--help` and no-argument bootstrap remain unchanged; conflict/usage messages
+    are extended to name the new exclusive option while the old exit codes stay;
+    version `0.2.0`.
+- Fixed-point derivation preserved:
+  - `rw_normalangle = seg.angle + ANG90` with unsigned BAM wrap; vanilla SEGS
+    raw angle `SHORT << 16`; the original unclipped v1 point angle is
+    `rw_angle1`; `offsetangle = abs(normalangle-angle1)`, clamp `> ANG90`,
+    `distangle = ANG90-offsetangle`; `hyp` is `R_PointToDist`, `distance` uses
+    `finesine[distangle>>ANGLETOFINESHIFT]`;
+  - `R_ScaleFromGlobalAngle` uses exact `FixedDiv`,
+    `den > num>>16` strict source comparison, `256`/`64*FRACUNIT` clamp and
+    `anglea/angleb` signed-low32 table-domain checks; `scale1` at
+    `viewangle+xtoviewangle[FirstX]`, `scale2` at `LastX`, `step` division and
+    the documented single-column `scale2=scale1/step=0` policy;
+  - ordinary signed 16.16 arithmetic stays continuous. The C signed-overflow
+    sites (`ceilingheight-viewz`, `topfrac+HEIGHTUNIT-1`, C unary minus,
+    incremental height additions) use documented widened/low32 helpers
+    `WallFixedAddLow`/`WallFixedSubLow`/`WallFixedNegateLow`/`FixedWrap32Low`.
+    The exact `abs(INT32_MIN)` input is rejected rather than masked; negative
+    signed scale indexes and overflowing scale endpoint differences are
+    explicit failures; coincident seg-v1/camera distance is
+    diagnosed rather than entering texture scale; ordinary `offset=ANG90` ->
+    `distangle=0`/`sineval=0` follows the source denominator-zero scale branch.
+  - height interpolation uses original `HEIGHTBITS=12`, `HEIGHTUNIT=4096`,
+    `>>4` shifted-domain arithmetic, `yl=(topfrac+HEIGHTUNIT-1)>>12`,
+    `yh=bottomfrac>>12`, inclusive pixel contracts and source pixhigh/pixlow
+    increment sites only inside their active two-sided tier branches.
+- Geometry/identity policy:
+  - front `worldtop/worldbottom` offsets, back `worldhigh/worldlow` when
+    present; closed-door solid override; front-plane wrong-side mark overrides;
+  - F_SKY1 hack changes `worldtop` only when a real back sector exists and both
+    ceiling flats resolve to `F_SKY1`; mismatch/one-sided never triggers it; the
+    same front-sky state drives the source wrong-side ceiling-mark override;
+  - catalog-aware flat/middle identity retains original numeric-index-0
+    NoTexture quirk, canonical `-`/all-NUL absence, missing/malformed name
+    diagnostics; fallback malformed names conservatively select debug tiers,
+    never invented texture pixels;
+  - canonical 16-bit map heights and checked conversions preserve original
+    `<=`/`>=`/`<>` comparisons. Vanilla `drawseg_t`, texture columns,
+    COLORMAP/lighting, masked midtextures, planes/sky/sprites are absent.
+- Frame orchestration/ownership:
+  - M3-04 ordered, occlusion-clipped `WallSpan` records are read in their
+    chronology; one plan slot per published span; no BSP re-walk, clip re-write,
+    sorting, dedupe or skipped span;
+  - target `FrameBuffer` byte state is untouched until the whole frame succeeds;
+    drawing goes into a fresh background-cleared private plane; failure frees
+    private frame/clip/metadata and leaves the previous target unchanged;
+    success alone releases/replaces the caller target. One metadata allocation
+    sized from visibility count, one 2,560-byte clip allocation, one 64,000-byte
+    private frame allocation — observed **Allocations = 3** for real maps, no
+    allocation inside the per-column loop. Result owns numeric metadata only,
+    never map/catalog/view/visibility/target pointers; Reset frees metadata and
+    leaves reusable zero counters.
+  - player-one start: exactly one THING `type=1`; absent/duplicate explicit
+    failure, no vertex fallback; signed map x/y -> checked fixed; the original
+    `ANG45 * (thing.angle/45)` truncation/unsigned wrap; bounded checked node-side
+    `R_PointInSubsector` including zero-node root; floor sector through
+    subsector; `viewz = floor<<16 + 41*FRACUNIT`, no bob/viewheight transition/
+    ceiling clamp. The owner-WI04 test independently re-derives the same THING,
+    leaf, floor and viewz before reusing M3-04 fingerprints.
+  - debug palette contract: background `0`, middle `176`, upper `252`, lower
+    `96`; one-sided middle closes column to ceilingclip=200/floorclip=-1; absent
+    middle/two-sided upper/lower follow source mark-only clip branches; painted
+    bytes are indices (no lighting/texturable content). Presentation may use the
+    user's PLAYPAL; no source pixels are copied into the frame or tracked files.
+  - hash: canonical row-major FNV-1a64 over **exactly 64,000** palette bytes,
+    offset `-3750763034362895579`, prime `1099511628211`, fixed 16 uppercase hex
+    including leading zeros (`WallFrameHashHex64`). No pointer, RGBA, padding,
+    window or screenshot bytes feed it.
+- M3-04 consumption edge: M3-04 publishes every raw `R_AddLine` candidate
+  interval in order, so overlapping portal spans can process the same physical
+  column more than once. M3-05 `ProcessedColumns` is bounded by `SpanCount*320`
+  candidate operations rather than a unique-column count; observed real values
+  are E1M1 1,080, E1M2 1,422, E4M1 836. Clipped/empty counters stay within that
+  processed count; every mapped vector row stays y=0..199 with observed
+  **OutOfFrameColumns = 0**. Tier range totals
+  `MiddleRanges+UpperRanges+LowerRanges = DrawRanges`; painted tier/background
+  counts reconcile to 64,000 exactly.
+- Independent fixture/oracle:
+  - `scripts/gen_wall_projection_golden.py` (pinned numeric tables only;
+    independent integer formulas; no PB renderer output consumed) generates
+    tracked synthetic-only `tests/fixtures/m3_wall_projection_golden.pbi` with
+    spans/plans/sample rows/hashes for A/B/E/T/C. Deterministic double
+    regeneration: SHA256
+    `CE4607EC1D93D734875EE48C5602AB75FD499FC80AA622607DB9E62093F53198`
+    twice and unchanged. Scene frame goldens: A `2090BE09430C7B25`, B
+    `72685823901A3A25`, E `B226A1443E08AB25`, T `D758954693568DA5`, C
+    `4D32B97402CD3925`. Generator kept source `R_Subsector` forward
+    firstSeg..lastSeg chronology; a production `MapSubsectorsGet` output-order
+    bug (`firstSeg,numSegs` swapped) was root-caused and fixed, not absorbed into
+    fixture expectations. `.Quad` is a PB structure type; missing-source edge
+    `.q` locals (e.g. `clampedOffset.q`, `distAngle.q`) replaced invalid
+    structure assignments.
+  - `tests/unit/wall_projection_tests.pb`: WP01–WP56 **56 cases / 738
+    assertions / 0 failures**, covering exact projection constants/distance/
+    height/12-bit steps, single-column policy, scale bounds, signed/unsigned
+    wrap edges, sky hack/closed doors/wrong-side/flats/absent middle, five
+    independent scenes' spans/plans/sample columns/hashes, heading/viewz
+    alternations, transactional failures/reset/lifetime/custom 200,000 span and
+    67,108,864-byte metadata budget controls, canonical zero-padded text and
+    repeat identity.
+  - `tests/integration/m3_wall_render_tests.pb`: WI01–WI03 **3 cases / 147
+    assertions / 0 failures**, real ten-lump synthetic `MapLevel` APIs through
+    A/B/E/C visibility→projection→transactional frames and independent exact
+    64,000 FNV; tier/background audit, boundaries y=0/199, occlusion crossing,
+    portal background gaps, malformed seg/coincident division/invalid viewz/
+    per-span budget/invalid pixel/transaction recovery, A↔B caller-target
+    lifetime, heading hash noncommutativity and canonical text.
+  - `tests/integration/m3_wall_render_iwad_tests.pb`: WI04 optional **1 case /
+    288 assertions / 0 failures**. E1M1/E1M2/E4M1 decoded PNAMES 351/textures
+    287/flats 111; map resource validation; exact player-one view plus
+    independent equivalent leaf/floor/viewz/camera checks; unchanged M3-04
+    span/counter fingerprints; three repeated compiled frames agree; exact
+    independent 64,000-byte FNV, canonical text, tier/background audit,
+    allocations/boundary counters; before/after owner IWAD size `12,408,292`
+    bytes/MD5 `c4fe9fd920207691a9f493668e0a2083` unchanged; no payload bytes,
+    coordinates or assets printed.
+  - Locked observed WI04 frame hashes (independently full-plane re-hashed,
+    repeated three frames in-harness and two separate executable invocations,
+    source/M3-04 fingerprints preserved, owner visual inspection):
+    E1M1 `4A923E4D357C7BD1`, E1M2 `0C9627E5C2FD8D35`, E4M1
+    `9AEB8BDD16834359`. Tier/background painted counts: E1M1 middle 9,234 /
+    upper 2,071 / lower 1,063 / background 51,632 (12,368 painted); E1M2
+    12,311 / 400 / 1,647 / background 49,642 (14,358 painted); E4M1 26,349 /
+    2,047 / 253 / background 35,351 (28,649 painted). Span counts 35/54/69,
+    processed candidate columns 1,080/1,422/836, draw ranges 748/883/584,
+    clipped/empty 625/481, 916/539, 198/291.
+  - M3-04 preserved owner fingerprints: E1M1 span `74B485154CE29B0B`/
+    counters `7ADB45DBF2611B77`; E1M2 `8AC0627513C4B619`/
+    `83CAB0E1049B850A`; E4M1 `9FD0B15A0F33197E`/`CCAA2442EB270717`.
+    Camera equivalence (fixed X/Y/raw heading + independently derived THING/
+    leaf/floor/viewz) was asserted before those goldens were reused.
+- GUI preview/visual status, Windows x64 only: rebuilt main entered
+  `--iwad data/DOOM.WAD --show-walls E1M1/E1M2/E4M1`, waited for the titled
+  windows, captured the 960x600 3x client via PrintWindow (occlusion-safe),
+  inspected, sent `WM_CLOSE`, each process exited 0. Observed coherent wall-only
+  solid-color fields: black index-0 background above/below and in portal gaps;
+  red middle index-176 faces, magenta upper index-252 strips, grey lower index-96
+  bands/wedges in valid upper-over-middle-over-lower order and perspective; no
+  texturing/lighting/sky/flats/sprites and no inverted/wrong-side artifacts
+  beyond documented omissions; crisp 3x nearest-neighbour blocks. Captures live
+  ignored in `build/` and were not copied, committed or printed as WAD payloads.
+  Window smoke is distinct from this visual observation.
+- Regression/observed totals (actual executable lines and script checks):
+  - no owner IWAD: actual all-suite aggregation **629 cases / 4,934 assertions /
+    0 failures** (includes first ten M1/M2 335/1,848, fixed 43/318, geometry
+    48/277+3/40, BSP 48/669+3/87, wall clipping 52/474+3/115, M2 synthetic
+    35/221, M3-05 WP56/738 and WI3/147; optional I04 NOT RUN contributes 0).
+    `scripts/test.ps1` **131/131 checks / exit 0**; browser-free smoke unchanged.
+  - with owner IWAD (replace, not double-count M2 synthetic run): actual M2 owner
+    mode **36/240** replaces synthetic 35/221; M3-01/M3-02/M3-03/M3-04/M3-05 I04
+    actual 1/32, 1/29, 1/45, 1/117, 1/288; aggregate **635 cases / 5,464
+    assertions / 0 failures**. `scripts/test.ps1 -IwadPath data/DOOM.WAD`
+    **165/165 checks / exit 0**. M2 owner mode is now wired once into both scripts
+    when a path is supplied; M3-05 build/test targets/sections are appended after
+    all existing suites. Bash scripts add the same `--wall-projection-test`,
+    `--wall-render-integration-test`, `--wall-render-iwad-test` targets and WI04
+    optional branch.
+  - Git Bash 5.2.37 `bash -n scripts/build.sh scripts/test.sh` returned **0/0**
+    (Git Bash syntax only, not Linux compilation). Linux x64 executable/runtime
+    **NOT RUN**; no Linux PB compiler/runtime host was verified.
+  - Main `pbcompiler src/DoomPB.pb --check` and build exit 0; frames/CLI smoke
+    remain green; `--version` `DoomPB 0.2.0` unchanged. No per-column heap
+    growth/crash occurred in any observed M3-05 run.
+- Documentation lookup: **Context7 USED** — real MCP `resolve-library-id`
+  resolved `/websites/purebasic` (5,085 snippets, high reputation, benchmark
+  78.42) and `query-docs` returned the official `Hex(Value.q [, Type])`/`RSet`
+  leading-zero contract. The entry is not an exact pinned 6.41 version; installed
+  `PureBasic 6.41` compiler syntax checks/probes and official local docs remained
+  authoritative fallback. The pinned C source remained authoritative for Doom
+  algorithms; Context7 was not used to override engine semantics. Unsupported
+  guessed PB API `FrameBufferIsValid` was rejected by real compiler and replaced
+  with field/Magic checks; uncertain `.Quad`/arithmetic assignments were resolved
+  by compiler probes and the real build.
+- Milestone/limits note: M3-05 completes the debug-color wall-only vertical
+  projection/frame slice, not M3's textured-wall Definition of Done. Missing:
+  texture columns/patches, COLORMAP/lights, masked midtextures, complete vanilla
+  `drawseg_t`/segment records, visplanes/flats, sky, sprites, full world renderer,
+  gameplay, UI/audio, saves/demos and Linux runtime. `v0.3.0` not prepared;
+  version remains `0.2.0`; no tag/commit/push was created by this task.
 
 ## Compatibility conventions adopted so far
 

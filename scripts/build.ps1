@@ -11,6 +11,10 @@
     Exit codes: 0 on success, 1 when the compiler cannot be found or a build
     step fails, otherwise the compiler's own exit code.
 
+    M3-05 variant targets are -WallProjectionTest (WP01-WP56 unit suite),
+    -WallRenderIntegrationTest (WI01-WI03 synthetic frames) and
+    -WallRenderIwadTest (optional WI04 owner-IWAD frames).
+
 .PARAMETER Check
     Run only the PureBasic syntax check; no executable is produced.
 
@@ -102,6 +106,18 @@
     Build the optional M3-04 real-IWAD projection/wall-clipping integration test
     program (tests/integration/m3_wall_clip_iwad_tests.pb) instead of the main executable.
 
+.PARAMETER WallProjectionTest
+    Build the M3-05 vertical wall projection/height/tier unit test program
+    (tests/unit/wall_projection_tests.pb) instead of the main executable.
+
+.PARAMETER WallRenderIntegrationTest
+    Build the M3-05 synthetic WAD/level/camera/frame integration test program
+    (tests/integration/m3_wall_render_tests.pb) instead of the main executable.
+
+.PARAMETER WallRenderIwadTest
+    Build the optional M3-05 real-IWAD wall visibility/frame integration test
+    program (tests/integration/m3_wall_render_iwad_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -174,6 +190,15 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -WallClippingIwadTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -WallProjectionTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -WallRenderIntegrationTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -WallRenderIwadTest
 #>
 [CmdletBinding()]
 param(
@@ -200,6 +225,9 @@ param(
     [switch]$WallClippingTest,
     [switch]$WallClippingIntegrationTest,
     [switch]$WallClippingIwadTest,
+    [switch]$WallProjectionTest,
+    [switch]$WallRenderIntegrationTest,
+    [switch]$WallRenderIwadTest,
     [string]$CompilerPath = ''
 )
 
@@ -232,12 +260,24 @@ if ($BspIwadTest) { $selectedTargets++ }
 if ($WallClippingTest) { $selectedTargets++ }
 if ($WallClippingIntegrationTest) { $selectedTargets++ }
 if ($WallClippingIwadTest) { $selectedTargets++ }
+if ($WallProjectionTest) { $selectedTargets++ }
+if ($WallRenderIntegrationTest) { $selectedTargets++ }
+if ($WallRenderIwadTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($WallClippingIwadTest) {
+if ($WallRenderIwadTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_wall_render_iwad_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3WallRenderIwadTests.exe'
+} elseif ($WallRenderIntegrationTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_wall_render_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3WallRenderTests.exe'
+} elseif ($WallProjectionTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\wall_projection_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-WallProjectionTests.exe'
+} elseif ($WallClippingIwadTest) {
     $sourceFile = Join-Path $repoRoot 'tests\integration\m3_wall_clip_iwad_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-M3WallClipIwadTests.exe'
 } elseif ($WallClippingIntegrationTest) {

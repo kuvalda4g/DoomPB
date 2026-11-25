@@ -269,10 +269,10 @@ Linux x64 — **NOT RUN**. Коммит/тег `v0.2.0` создаёт влад�
 
 ### M3 — Геометрия и первые стены (`v0.3.0`)
 
-**Основные модули:** `Fixed.pbi`, `Geometry.pbi`, `BSP.pbi`, `Segs.pbi`, `Draw.pbi`, `RenderMain.pbi`.
+**Основные модули:** `Fixed.pbi`, `Geometry.pbi`, `BSP.pbi`, `WallVisibility.pbi`, `WallView.pbi`, `WallProject.pbi`, `WallDraw.pbi`, `RenderMain.pbi`.
 
 - [x] Перенести fixed-point операции и необходимые lookup/trigonometry tables (M3-01/M3-02, Windows x64).
-- [x] Реализовать точную экранную горизонтальную проекцию и FOV-углы: `R_InitTextureMapping`, `viewangletox`/`xtoviewangle`/`clipangle` M3-04 для канонического 320-column viewport; полная вертикальная wall projection остаётся M3-05.
+- [x] Реализовать точную экранную горизонтальную проекцию и FOV-углы: `R_InitTextureMapping`, `viewangletox`/`xtoviewangle`/`clipangle` M3-04 для канонического 320-column viewport; полная вертикальная wall projection теперь реализована M3-05.
 - [x] Создать камеру с заданной позицией и направлением (M3-03 `BspCamera`,
       signed 16.16 X/Y и raw unsigned BAM heading).
 - [x] Перенести обход BSP дерева с правильным порядком near-to-far (M3-03 cull-free
@@ -280,23 +280,28 @@ Linux x64 — **NOT RUN**. Коммит/тег `v0.2.0` создаёт влад�
       изменения старого trace behavior).
 - [x] Реализовать headless solid/pass wall clipping с inclusive интервалами,
       owned solidsegs-эквивалентом и реальным occlusion state (M3-04).
-- [ ] Реализовать `drawsegs`, вертикальную wall projection и отрисовку одноцветных колонок (M3-05+; M3-04 публикует только экранные интервалы/счётчики).
-- [ ] Добавить верхние/нижние/middle wall textures и clipping по экрану.
-- [ ] Сравнивать результирующие frame hashes / изображения с эталонной сборкой при одинаковых позициях камеры.
-- [ ] Замерять время CPU на кадр и отсутствие лишних аллокаций внутри горячего цикла.
+- [x] Реализовать вертикальную wall projection `R_StoreWallRange`/`R_ScaleFromGlobalAngle` и отрисовку одноцветных middle/upper/lower колонок с точным clip по экрану (M3-05, Windows x64; debug palette indices 0/176/252/96). Полный vanilla `drawseg_t` records всё ещё отложен: кадр использует caller-owned `WallSpanPlan` numeric metadata.
+- [ ] Добавить верхние/нижние/middle wall textures и masked midtexture clipping по экрану (geometry/tier positions уже реализованы M3-05; texture sampling/COLORMAP/lighting отсутствуют).
+- [ ] Сравнивать результирующие textured frame hashes / изображения с эталонной сборкой при одинаковых позициях камеры (M3-05 проверяет детерминированные debug-color hashes independently; эталонная textured сборка ещё не доступна).
+- [ ] Замерять время CPU на кадр и отсутствие лишних аллокаций внутри горячего цикла (M3-05 требует 3 checked allocations/frame, но CPU timing не измерен).
 
 **Критерий готовности:** из фиксированной камеры в E1M1 видны **правильно расположенные и текстурированные стены** без заметных геометрических артефактов; можно воспроизвести один и тот же кадр.
 
-**Статус (25 ноября 2026):** M3 не завершён. M3-01 fixed-point, M3-02 BAM
+**Статус (26 ноября 2026):** M3 не завершён. M3-01 fixed-point, M3-02 BAM
 углы/точные trig-tables/geometry primitives, M3-03 детерминированный обход BSP
-дерева из fixed camera с owned `SUBSECTOR`/`SEG` trace и M3-04 точная 320-column
+дерева из fixed camera с owned `SUBSECTOR`/`SEG` trace, M3-04 точная 320-column
 проекция, headless solid/pass interval clipping, source-faithful `R_AddLine`
-SOLID/PASS screen spans, полный `R_CheckBBox` и online near-first occlusion walk
-реализованы и протестированы на Windows x64 (PB 6.41) в рабочем дереве.
-M3-04 публикует только owned числовые экранные интервалы/счётчики и не рисует
-пиксели, `drawsegs` или текстурированные стены; vertical projection/drawsegs,
-одноцветные/текстурированные колонки, planes и полный world renderer остаются
-M3-05+. Версия остаётся `0.2.0`; `v0.3.0` не подготовлен; Linux x64 — NOT RUN.
+SOLID/PASS screen spans, полный `R_CheckBBox` и online near-first occlusion walk, и
+M3-05 checked `WallView` (fixed camera + static signed 16.16 viewz), точная
+вертикальная `R_StoreWallRange`/`R_ScaleFromGlobalAngle` projection, 12-bit
+interpolation plans, transactional 320x200 wall-only кадр и отрисовка одноцветных
+middle/upper/lower tiers реализованы и протестированы на Windows x64 (PB 6.41)
+в рабочем дереве. M3-04 публикует owned числовые экранные интервалы/счётчики;
+M3-05 рисует **debug palette indices** (0/176/252/96), поддерживает M3-04 order/
+occlusion и выдаёт canonical FNV-1a64 кадра, но не текстурные/lighting/sky/flat/
+sprite pixels. `drawseg_t`, texture sampling, COLORMAP lighting, visplanes/sky,
+sprites, planes и полный world renderer остаются M3/M4+. Версия остаётся
+`0.2.0`; `v0.3.0` не подготовлен; Linux x64 — NOT RUN.
 
 ### M4 — Полный программный рендерер (`v0.4.0`)
 

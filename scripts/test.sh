@@ -12,13 +12,15 @@
 # unit B01-B48, its synthetic WAD/level/camera/trace integration I01-I03 and
 # optional real-IWAD I04, M3-04 screen-projection/wall-clipping/occlusion unit
 # WC01-WC52, its synthetic WAD/level/camera/online-visibility integration
-# I01-I03 and optional real-IWAD catalog-aware I04, and smoke tests
-# against the produced executable: --version, --help, no-argument startup,
-# unknown-option handling, --lump-info argument validation and nonblocking
-# --show-title failures. No commercial game data and no display are needed for
-# the synthetic suite. When IWAD_PATH points at an owner-owned legal IWAD,
-# optional M3-03 I04, M3-04 I04 and --map-info CLI checks additionally run
-# read-only.
+# I01-I03 and optional real-IWAD catalog-aware I04, M3-05 vertical wall
+# projection/tier rendering unit WP01-WP56, its synthetic WAD/level/camera/
+# frame integration WI01-WI03 and optional real-IWAD wall-render WI04, and
+# smoke tests against the produced executable: --version, --help, no-argument
+# startup, unknown-option handling, --lump-info argument validation and
+# nonblocking --show-title failures. No commercial game data and no display
+# are needed for the synthetic suite. When IWAD_PATH points at an owner-owned
+# legal IWAD, optional M3-03 I04, M3-04 I04, M3-05 WI04 and --map-info CLI
+# checks additionally run read-only.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -51,6 +53,9 @@ BSP_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3BspIwadTests"
 WALL_CLIPPING_TEST_BIN="${REPO_ROOT}/build/DoomPB-WallClippingTests"
 WALL_CLIPPING_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallClipTests"
 WALL_CLIPPING_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallClipIwadTests"
+WALL_PROJECTION_TEST_BIN="${REPO_ROOT}/build/DoomPB-WallProjectionTests"
+WALL_RENDER_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallRenderTests"
+WALL_RENDER_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallRenderIwadTests"
 IWAD_PATH="${IWAD_PATH:-}"
 CHECKS=0
 FAILURES=0
@@ -1251,14 +1256,274 @@ else
 fi
 
 printf '\n== M2 end-to-end integration tests ==\n'
-"${INTEGRATION_TEST_BIN}"
+if [ -n "${IWAD_PATH}" ] && [ -f "${IWAD_PATH}" ]; then
+    "${INTEGRATION_TEST_BIN}" "${IWAD_PATH}"
+else
+    "${INTEGRATION_TEST_BIN}"
+fi
 integration_status=$?
 CHECKS=$((CHECKS + 1))
 if [ "${integration_status}" -eq 0 ]; then
-    printf 'PASS: synthetic M2 integration tests exit with 0\n'
+    printf 'PASS: M2 integration tests (synthetic or owner-I04 mode) exit with 0\n'
 else
-    printf 'FAIL: synthetic M2 integration tests exit with %s\n' "${integration_status}" >&2
+    printf 'FAIL: M2 integration tests exit with %s\n' "${integration_status}" >&2
     FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-05 wall projection unit test build ==\n'
+run_build --check --wall-projection-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-05 wall projection unit test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-05 wall projection unit test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-05 wall projection unit test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --wall-projection-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-05 wall projection unit test build exits with 0\n'
+else
+    printf 'FAIL: M3-05 wall projection unit test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-05 wall projection unit test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${WALL_PROJECTION_TEST_BIN}" ]; then
+    printf 'PASS: M3-05 wall projection unit test output exists: %s\n' "${WALL_PROJECTION_TEST_BIN}"
+else
+    printf 'FAIL: M3-05 wall projection unit test output missing: %s\n' "${WALL_PROJECTION_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-05 wall projection unit test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-05 wall projection unit tests (WP01-WP56) ==\n'
+wall_projection_unit_output="$("${WALL_PROJECTION_TEST_BIN}" 2>&1)"
+wall_projection_unit_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${wall_projection_unit_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-05 wall projection unit tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-05 wall projection unit tests exit with %s\n' "${wall_projection_unit_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${wall_projection_unit_output}" | grep -q -- 'Cases: 56, assertions: 738, failures: 0'; then
+    printf 'PASS: M3-05 WP01-WP56 runs 56 cases/738 assertions/0 failures\n'
+else
+    printf 'FAIL: M3-05 WP01-WP56 case/assertion totals differ\n%s\n' "${wall_projection_unit_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-05 synthetic wall-render integration test build ==\n'
+run_build --check --wall-render-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-05 synthetic wall-render integration test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-05 synthetic wall-render integration test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-05 synthetic wall-render integration test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --wall-render-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-05 synthetic wall-render integration test build exits with 0\n'
+else
+    printf 'FAIL: M3-05 synthetic wall-render integration test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-05 synthetic wall-render integration test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${WALL_RENDER_INTEGRATION_TEST_BIN}" ]; then
+    printf 'PASS: M3-05 synthetic wall-render test output exists: %s\n' "${WALL_RENDER_INTEGRATION_TEST_BIN}"
+else
+    printf 'FAIL: M3-05 synthetic wall-render test output missing: %s\n' "${WALL_RENDER_INTEGRATION_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-05 synthetic wall-render test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-05 synthetic wall-render integration tests (WI01-WI03) ==\n'
+wall_render_integration_output="$("${WALL_RENDER_INTEGRATION_TEST_BIN}" 2>&1)"
+wall_render_integration_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${wall_render_integration_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-05 wall-render integration tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-05 wall-render integration tests exit with %s\n' "${wall_render_integration_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${wall_render_integration_output}" | grep -q -- 'Cases: 3, assertions: 147, failures: 0'; then
+    printf 'PASS: M3-05 WI01-WI03 runs 3 cases/147 assertions/0 failures\n'
+else
+    printf 'FAIL: M3-05 WI01-WI03 case/assertion totals differ\n%s\n' "${wall_render_integration_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-05 optional IWAD wall-render test build ==\n'
+run_build --check --wall-render-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-05 optional IWAD wall-render test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-05 optional IWAD wall-render test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-05 optional IWAD wall-render test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --wall-render-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-05 optional IWAD wall-render test build exits with 0\n'
+else
+    printf 'FAIL: M3-05 optional IWAD wall-render test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-05 optional IWAD wall-render test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${WALL_RENDER_IWAD_TEST_BIN}" ]; then
+    printf 'PASS: M3-05 optional IWAD wall-render test output exists: %s\n' "${WALL_RENDER_IWAD_TEST_BIN}"
+else
+    printf 'FAIL: M3-05 optional IWAD wall-render test output missing: %s\n' "${WALL_RENDER_IWAD_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-05 optional IWAD wall-render test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-05 optional IWAD wall-render tests ==\n'
+if [ -z "${IWAD_PATH}" ]; then
+    wall_render_iwad_output="$("${WALL_RENDER_IWAD_TEST_BIN}" 2>&1)"
+    wall_render_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${wall_render_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional IWAD wall-render tests exit with 0 without a WAD path\n'
+    else
+        printf 'FAIL: optional IWAD wall-render tests exit with %s\n' "${wall_render_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -Eq -- 'NOT RUN'; then
+        printf 'PASS: optional IWAD wall-render tests report NOT RUN without a path\n'
+    else
+        printf 'FAIL: optional IWAD wall-render tests did not report NOT RUN\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    CHECKS=$((CHECKS + 1))
+    if [ -f "${IWAD_PATH}" ]; then
+        printf 'PASS: explicit owner IWAD path exists\n'
+    else
+        printf 'FAIL: explicit owner IWAD path does not exist\n' >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    wall_render_iwad_output="$("${WALL_RENDER_IWAD_TEST_BIN}" "${IWAD_PATH}" 2>&1)"
+    wall_render_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${wall_render_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional IWAD wall-render E1M1/E1M2/E4M1 frame integration exits with 0\n'
+    else
+        printf 'FAIL: optional IWAD wall-render integration exits with %s\n' "${wall_render_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -Eq -- '^RESULT: PASS'; then
+        printf 'PASS: optional IWAD wall-render integration reports PASS\n'
+    else
+        printf 'FAIL: optional IWAD wall-render integration did not report PASS\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'Cases: 1, assertions: 288, failures: 0'; then
+        printf 'PASS: optional IWAD wall-render WI04 runs 1 case/288 assertions/0 failures\n'
+    else
+        printf 'FAIL: optional IWAD wall-render WI04 case/assertion totals differ\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'E1M1: frame spans 35'; then
+        printf 'PASS: optional IWAD wall-render actually rendered E1M1\n'
+    else
+        printf 'FAIL: optional IWAD E1M1 frame measurement missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'E1M2: frame spans 54'; then
+        printf 'PASS: optional IWAD wall-render actually rendered E1M2\n'
+    else
+        printf 'FAIL: optional IWAD E1M2 frame measurement missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'E4M1: frame spans 69'; then
+        printf 'PASS: optional IWAD wall-render actually rendered E4M1\n'
+    else
+        printf 'FAIL: optional IWAD E4M1 frame measurement missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'frame FNV-1a64 4A923E4D357C7BD1'; then
+        printf 'PASS: optional IWAD E1M1 locked frame hash reproduced\n'
+    else
+        printf 'FAIL: optional IWAD E1M1 frame hash missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'frame FNV-1a64 0C9627E5C2FD8D35'; then
+        printf 'PASS: optional IWAD E1M2 locked frame hash reproduced\n'
+    else
+        printf 'FAIL: optional IWAD E1M2 frame hash missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'frame FNV-1a64 9AEB8BDD16834359'; then
+        printf 'PASS: optional IWAD E4M1 locked frame hash reproduced\n'
+    else
+        printf 'FAIL: optional IWAD E4M1 frame hash missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'FNV-1a64 spans 74B485154CE29B0B, counters 7ADB45DBF2611B77'; then
+        printf 'PASS: optional IWAD E1M1 M3-04 span/counters preserved\n'
+    else
+        printf 'FAIL: optional IWAD E1M1 M3-04 span/counter preservation line missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'FNV-1a64 spans 8AC0627513C4B619, counters 83CAB0E1049B850A'; then
+        printf 'PASS: optional IWAD E1M2 M3-04 span/counters preserved\n'
+    else
+        printf 'FAIL: optional IWAD E1M2 M3-04 span/counter preservation line missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -q -- 'FNV-1a64 spans 9FD0B15A0F33197E, counters CCAA2442EB270717'; then
+        printf 'PASS: optional IWAD E4M1 M3-04 span/counters preserved\n'
+    else
+        printf 'FAIL: optional IWAD E4M1 M3-04 span/counter preservation line missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_render_iwad_output}" | grep -Eq -- 'owner IWAD remains unchanged'; then
+        printf 'PASS: owner IWAD read-only size/MD5 unchanged\n'
+    else
+        printf 'FAIL: owner IWAD unchanged verification missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
 fi
 
 printf '\n== Smoke tests ==\n'

@@ -5,7 +5,8 @@ in **PureBasic**. The goal is to reproduce the behaviour of id Software's
 **Linux Doom 1.10** — software renderer, fixed-point arithmetic, 35 Hz game
 ticks and WAD compatibility — rather than to reimagine it.
 
-> **Status: `0.2.0` — milestone M2 complete on Windows x64 (prepared, owner commit/tag pending).**
+> **Status: `0.2.0` — milestone M2 complete on Windows x64; M3-05 wall layer in
+> the working tree (owner commit/tag pending).**
 > The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`,
 > `COLORMAP`, `PNAMES`, `TEXTURE1`/`TEXTURE2`, composites titles and wall
 > textures, reads flats and sprite metadata, and presents `TITLEPIC` in a native
@@ -23,13 +24,21 @@ ticks and WAD compatibility — rather than to reimagine it.
 > tables for the canonical 320-column view, safe owned solid/pass interval
 > clipping, source-faithful `R_AddLine` SOLID/PASS screen-range emission, full
 > `R_CheckBBox` and an online near-to-far walk where the far child is visited only
-> after real occlusion state exists. That output is headless: ordered numeric
-> visible span records/counters, **not** pixels, drawsegs, vertical projection,
-> textured columns, planes or sprites. Drawsegs/one-color column drawing,
-> textured walls and the world renderer remain M3-05+. Gameplay, UI and audio are
-> still pending, M3 as a whole is not complete and `v0.3.0` is not prepared.
-> The application version remains `0.2.0`. Linux x64 runtime is **NOT RUN**. No
-> Git tag exists until the owner creates it.
+> after real occlusion state exists. That output is headless ordered numeric
+> visible span records/counters. M3-05 adds a checked `WallView` (existing camera
+> plus signed 16.16 static `viewz`), `R_StoreWallRange`/`R_ScaleFromGlobalAngle`
+> vertical projection and per-span numeric plans with the original 12-bit
+> `topfrac`/`bottomfrac` interpolation, then a transactional 320x200 wall-only
+> frame that draws **solid debug palette indices** for middle/upper/lower tiers:
+> background `0`, middle `176`, upper `252`, lower `96`. It preserves M3-04 span
+> order/occlusion, writes no texture/flat/sky/light/sprite pixels, emits a
+> canonical FNV-1a64 over the exact 64,000 row-major palette bytes, and adds an
+> opt-in `--iwad <path> --show-walls <ExMy>` 3x preview from the validated
+> player-one start. Drawsegs, textured/masked columns, planes, sky, lighting,
+> sprites and the full world renderer remain later M3/M4 steps. Gameplay, UI and
+> audio are still pending, M3 as a whole is not complete and `v0.3.0` is not
+> prepared. The application version remains `0.2.0`. Linux x64 runtime is
+> **NOT RUN**. No Git tag exists until the owner creates it.
 
 ## Legal notice
 
@@ -130,6 +139,15 @@ repository.
 # Build the optional M3-04 catalog-aware real-IWAD tests -> build/DoomPB-M3WallClipIwadTests.exe
 ./scripts/build.ps1 -WallClippingIwadTest
 
+# Build the M3-05 wall projection/height/tier tests -> build/DoomPB-WallProjectionTests.exe
+./scripts/build.ps1 -WallProjectionTest
+
+# Build the M3-05 synthetic WAD/level/camera/frame tests -> build/DoomPB-M3WallRenderTests.exe
+./scripts/build.ps1 -WallRenderIntegrationTest
+
+# Build the optional M3-05 real-IWAD frame tests -> build/DoomPB-M3WallRenderIwadTests.exe
+./scripts/build.ps1 -WallRenderIwadTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -209,6 +227,15 @@ repository.
 # Build the optional M3-04 catalog-aware real-IWAD tests -> build/DoomPB-M3WallClipIwadTests
 ./scripts/build.sh --wall-clipping-iwad-test
 
+# Build the M3-05 wall projection/height/tier tests -> build/DoomPB-WallProjectionTests
+./scripts/build.sh --wall-projection-test
+
+# Build the M3-05 synthetic WAD/level/camera/frame tests -> build/DoomPB-M3WallRenderTests
+./scripts/build.sh --wall-render-integration-test
+
+# Build the optional M3-05 real-IWAD frame tests -> build/DoomPB-M3WallRenderIwadTests
+./scripts/build.sh --wall-render-iwad-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
@@ -224,24 +251,26 @@ the M3-01 fixed-point suite, the M3-02 BAM angle/exact-table/geometry suite,
 the M3-02 synthetic geometry integration suite, the M3-03 BSP traversal suite
 (B01-B48), its synthetic WAD/level/camera/trace integration (I01-I03), the M3-04
 screen-projection/wall-clipping/occlusion suite (WC01-WC52), its synthetic
-WAD/level/camera/online-visibility integration (I01-I03) and all optional IWAD
-harnesses (NOT RUN without a supplied path), plus smoke tests against the
-produced executable. They need no game data and no graphical display for the
-synthetic suite; no window is opened by the automated suite without an explicit
-IWAD path. `--show-title` remains an owner/gui interactive check.
+WAD/level/camera/online-visibility integration (I01-I03), the M3-05 vertical wall
+projection/tier suite (WP01-WP56), its synthetic WAD/level/camera/frame
+integration (WI01-WI03) and all optional IWAD harnesses (NOT RUN without a
+supplied path), plus smoke tests against the produced executable. They need no
+game data and no graphical display for the synthetic suite; no window is opened
+by the automated suite without an explicit IWAD path. `--show-title` and
+`--show-walls` remain owner/GUI interactive checks.
 
 ```powershell
 ./scripts/test.ps1     # Windows; synthetic only, optional IWAD I04 NOT RUN
 
 ./scripts/test.ps1 -IwadPath 'D:\path\to\legally-owned\DOOM.WAD'
-# Windows; adds read-only M3-03 and M3-04 E1M1/E1M2/E4M1 I04 and --map-info CLI checks
+# Windows; adds read-only M3-03/M3-04 I04, M3-05 WI04 and --map-info CLI checks
 ```
 
 ```bash
 ./scripts/test.sh      # Linux; synthetic only, optional IWAD I04 NOT RUN
 
 IWAD_PATH=/path/to/legally-owned/DOOM.WAD ./scripts/test.sh
-# Linux; adds read-only M3-03 and M3-04 E1M1/E1M2/E4M1 I04 and --map-info CLI checks
+# Linux; adds read-only M3-03/M3-04 I04, M3-05 WI04 and --map-info CLI checks
 ```
 
 A test run fails with a non-zero exit code if any check fails.
@@ -255,6 +284,8 @@ DoomPB --iwad <path> --dump-info         Print WAD header/directory metadata.
 DoomPB --iwad <path> --lump-info <name>  Print one lump's index, offset and size.
 DoomPB --iwad <path> --show-title        Show TITLEPIC in a 3x window.
 DoomPB --iwad <path> --map-info <ExMy>   Load and validate a vanilla map.
+DoomPB --iwad <path> --show-walls <ExMy> Render an M3-05 wall-only debug-color
+                                        320x200 frame from the player-one start at 3x.
 DoomPB                                   Print the bootstrap status and exit.
 ```
 

@@ -3,14 +3,18 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
-## [Unreleased] - M3 math, BAM angle, geometry, BSP traversal, screen projection/wall clipping
+## [Unreleased] - M3 math, BAM angle, geometry, BSP traversal, screen projection/wall clipping, vertical wall projection/frame
 
 M3 is not complete; the application version remains `0.2.0`. No tag or release
-is created for this increment. M3-01, M3-02, M3-03 and M3-04 modules/tests are
-in the working tree; drawsegs/one-color column drawing, vertical wall projection,
-textured rendering and planes remain later M3-05+ steps. M3-04 produces headless,
-owned numeric screen-column visibility intervals and counters, not rendered
-walls or a frame.
+is created for this increment. M3-01, M3-02, M3-03, M3-04 and M3-05 modules/tests
+are in the working tree. M3-04 produces headless, owned numeric screen-column
+visibility intervals and counters. M3-05 adds checked static viewz, exact
+`R_StoreWallRange`/`R_ScaleFromGlobalAngle` vertical projection and 12-bit
+interpolation, a transactional 320x200 wall-only frame with one-color middle/
+upper/lower tiers, a canonical 64,000-byte frame hash and an opt-in player-start
+preview. Textured/masked wall columns, COLORMAP/lighting, complete vanilla
+`drawseg_t`, visplanes/flats, sky, sprites and the full world renderer remain
+later steps.
 
 ### Added
 
@@ -147,6 +151,81 @@ walls or a frame.
   screen-column visibility, source/safety deviations, deferred drawseg/pixel/
   vertical/textured work and observed results.
 
+- `src/Renderer/WallView.pbi`: caller-owned M3-03 `BspCamera` plus checked signed
+  16.16 static `ViewZ`; floor map units are converted to fixed and
+  `VIEWHEIGHT=41*FRACUNIT` added with signed64 bounds before any publish;
+  transactional fixed/map-unit setters, idempotent reset, read-only accessors.
+- `src/Renderer/WallProject.pbi`: dependency-checked equivalent of `r_segs.c`
+  `R_StoreWallRange`/`r_main.c` `R_ScaleFromGlobalAngle`: seg raw `SHORT<<16`
+  BAM conversion, normal/offset/dist angles, `R_PointToDist`/finesine distance,
+  scale1/scale2/step clamp, front/back heights, closed-door/SKY1/wrong-side
+  overrides, catalog-aware flat/middle tier presence, original 12-bit
+  `topfrac`/`bottomfrac`/pix edges and numeric per-span `WallSpanPlan`. Ordinary
+  signed 16.16 arithmetic stays source-exact; C signed-overflow sites use
+  documented low32 helpers; `abs(INT32_MIN)`, negative scale indexes, endpoint
+  scale-step overflow and coincident seg-v1/camera are diagnosed; single-column
+  scale2=scale1/step=0 policy preserved. No texture/flat/sky/light/sprite pixels.
+- `src/Renderer/WallDraw.pbi`: M3-05 bounded rasterizer of `R_RenderSegLoop` into
+  the existing 320x200 indexed `FrameBuffer`: 320 ceilingclip/floorclip arrays
+  initialized -1/200, exact `(topfrac+HEIGHTUNIT-1)>>12` / `bottomfrac>>12`
+  inclusive contracts, source tier clip/mark branches, pixhigh/pixlow increments
+  only in active two-sided tiers; one-sided middle closes column to 200/-1.
+  Solid debug palette indices background `0`/middle `176`/upper `252`/lower `96`;
+  one contiguous clip allocation, no allocation in the column loop; canonical
+  FNV-1a64 over exact 64,000 row-major bytes with fixed 16 uppercase hex text.
+- `src/Renderer/RenderMain.pbi`: `WallPlayerSubsectorChecked` bounded original
+  `R_PointInSubsector` equivalent incl zero-node root; `WallRenderPlayerStartView`
+  exact-one player `type=1`, signed16 x/y checked fixed, original
+  `ANG45*(angle/45)` unsigned wrap, derived floor sector and static
+  `floor+41` viewz; transactional `WallRenderFrame` reads M3-04 ordered spans as
+  sole authority, builds one plan per span, draws into a private plane and only
+  publishes/releases the caller target after whole-frame success; failure leaves
+  target byte state unchanged and frees clip/plans/frame; one metadata + one
+  clip + one frame allocation (Allocations=3 on owner maps), no target/map/
+  catalog/view retention, idempotent result Reset and read-only stats/hash/plan
+  accessors.
+- `src/Graphics/Video.pbi`: `VideoShowFramebuffer` accepts an optional custom
+  `Title.s` for the preview window; the existing default TITLEPIC window title,
+  size, 3x nearest-neighbour client and close/release path remain unchanged.
+- `src/DoomPB.pb`: opt-in `--iwad <path> --show-walls <ExMy>` static player-start
+  wall-only preview at 3x with coarse counters and canonical hash; existing
+  `--show-title`/`--map-info`/`--lump-info`/`--dump-info`/`--version`/`--help`/
+  no-argument paths and exit codes unchanged (conflict diagnostics name the new
+  exclusive option); version `0.2.0`.
+- Independent generator `scripts/gen_wall_projection_golden.py` and tracked
+  synthetic-only numeric fixture `tests/fixtures/m3_wall_projection_golden.pbi`
+  (A/B/E/T/C spans, plans, sample palette rows, frame hashes); generator consumes
+  only pinned numeric tables and separate integer formulas, never production
+  output. Deterministic double regeneration SHA256
+  `CE4607EC1D93D734875EE48C5602AB75FD499FC80AA622607DB9E62093F53198`.
+- `tests/unit/wall_projection_tests.pb`: WP01-WP56 **56 cases / 738 assertions**,
+  unit fixture support with explicit SEGS raw angle, exact projection/distance/
+  scale/heights/tiers/sky/closed-door/wrong-side/flats/absent-middle, five
+  scalar scene oracles, sample rows/hashes, headed/viewz alternations, all
+  documented arithmetic edges, transactional budgets/reset/lifetime/canonical
+  zero-padded text/repeat identity.
+- `tests/integration/m3_wall_render_tests.pb`: WI01-WI03 **3 cases / 147
+  assertions**, real synthetic ten-lump `MapLevel` path through M3-04 visibility,
+  M3-05 plans and transactional frames; independent 64,000-byte FNV, palette
+  audit, tier reconciliation, occlusion crossing, portal gaps, y=0/199 bounds,
+  malformed seg/coincident divide/invalid viewz/budget/invalid pixels/recovery,
+  A-B-A caller target lifetime, ANG45 noncommutative hash and canonical text.
+- `tests/integration/m3_wall_render_iwad_tests.pb`: optional WI04 **1 case / 288
+  assertions**, E1M1/E1M2/E4M1 catalogs/validation/player-start camera with
+  independent equivalent THING/leaf/floor/viewz, unchanged M3-04 span/counter
+  fingerprints, three repeated compiled frames, exact independent FNV and
+  palette-indices audit, allocations/boundaries, before/after MD5/size unchanged.
+- `-WallProjectionTest`, `-WallRenderIntegrationTest`, `-WallRenderIwadTest`
+  PowerShell targets; `--wall-projection-test`, `--wall-render-integration-test`,
+  `--wall-render-iwad-test` Bash targets. `scripts/test.ps1`/`test.sh` run
+  WP01-WP56, WI01-WI03 and optional WI04 after all prior suites; `-IwadPath`/
+  `IWAD_PATH` runs WI04 read-only and now wires the pre-existing M2 owner-I04
+  mode once rather than both synthetic+owner modes.
+- README/PORTING_NOTES/DEVELOPMENT_PLAN/CHANGELOG document M3-05 module/C
+  correspondence, fixed/edge derivation, sky/missing-texture policy, ownership/
+  lifetime, actual frame hashes/counters, GUI visual status, cumulative totals
+  and remaining textured/plane/sprite/gameplay gaps.
+
 ### Verified
 
 - Windows x64, PureBasic 6.41: fixed math suite 43 cases / 318 assertions / 0
@@ -248,6 +327,54 @@ walls or a frame.
 - Main `src/DoomPB.pb --check` and build exit 0; CLI `--version` still
   `DoomPB 0.2.0`; unknown option exit 2, missing WAD exit 1 and
   `--show-title`/`--dump-info` conflict exit 2 behaved unchanged in smoke tests.
+
+- M3-05, Windows x64 PureBasic 6.41: WP01-WP56 **56 cases / 738 assertions / 0
+  failures**; synthetic WI01-WI03 **3 cases / 147 assertions / 0 failures**;
+  optional owner-IWAD WI04 **1 case / 288 assertions / 0 failures**. The owner
+  Ultimate Doom 1.9ud `DOOM.WAD` (12,408,292 bytes, MD5
+  `c4fe9fd920207691a9f493668e0a2083`) remained unchanged before/after read-only
+  runs; PNAMES 351, textures 287, flats 111.
+- Independent fixture generator double run byte-identical SHA256
+  `CE4607EC1D93D734875EE48C5602AB75FD499FC80AA622607DB9E62093F53198`;
+  synthetic frame goldens A `2090BE09430C7B25`, B `72685823901A3A25`, E
+  `B226A1443E08AB25`, T `D758954693568DA5`, C `4D32B97402CD3925`; sample
+  columns/rows/plans all independently generated. A production subsector
+  output-order bug was root-caused/fixed without changing fixture expectations.
+- Locked WI04 owner frame hashes: E1M1 `4A923E4D357C7BD1`, E1M2
+  `0C9627E5C2FD8D35`, E4M1 `9AEB8BDD16834359`; each independently full-plane
+  re-hashed, reproduced by three in-harness frames and two separate executable
+  invocations, and source/M3-04 preconditioned. Preserved M3-04 owner
+  fingerprints: E1M1 span/counters `74B485154CE29B0B`/`7ADB45DBF2611B77`; E1M2
+  `8AC0627513C4B619`/`83CAB0E1049B850A`; E4M1
+  `9FD0B15A0F33197E`/`CCAA2442EB270717`. Camera/view equivalence was asserted.
+- M3-05 owner map frame counters: E1M1 35 spans/1,080 processed/748 draw ranges,
+  12,368 painted = middle 9,234 + upper 2,071 + lower 1,063, background 51,632,
+  clipped/empty 625/481; E1M2 54/1,422/883, 14,358 = 12,311+400+1,647,
+  background 49,642, clipped/empty 916/539; E4M1 69/836/584, 28,649 =
+  26,349+2,047+253, background 35,351, clipped/empty 198/291; every frame
+  Allocations=3, OutOfFrameColumns=0, all four palette kinds nonzero, tier and
+  background bytes reconcile to 64,000.
+- Full regression rerun (actual executable outputs): no owner IWAD **629 cases /
+  4,934 assertions / 0 failures**, `scripts/test.ps1` **131/131 checks exit 0**.
+  With owner IWAD, replacing the M2 synthetic run by its one owner-I04 mode
+  36/240 and adding actual M3-01/M3-02/M3-03/M3-04/M3-05 I04 counts
+  1/32, 1/29, 1/45, 1/117, 1/288 gives **635 cases / 5,464 assertions / 0
+  failures**, `scripts/test.ps1 -IwadPath data/DOOM.WAD` **165/165 checks exit
+  0**. Existing M1/M2/M3-01..04 expectations/hashes were not weakened.
+- GUI visual inspection (Windows, owner IWAD): rebuilt `--show-walls
+  E1M1/E1M2/E4M1`, 960x600 3x client captured via occlusion-safe PrintWindow,
+  inspected, `WM_CLOSE` accepted, each exit 0. Observed coherent debug-color
+  wall fields: black background (index 0) above/below/portal gaps, red middle
+  faces (176), magenta upper strips (252), grey lower bands/wedges (96) in
+  correct tier order/perspective, crisp nearest-neighbour columns, no texturing/
+  lighting/sky/flats/sprites, no unexpected inverted/wrong-side artifacts. Captures
+  stayed ignored in `build/` and no commercial pixels were committed/published.
+- `scripts/test.sh` mirrors new targets/optional WI04 and M2 owner-I04 single-run
+  mode; Git Bash 5.2.37 `bash -n` returned **0/0** (syntax only). Linux x64
+  compilation/runtime remains **NOT RUN**; Windows-only evidence reported.
+- No per-column heap growth or crash was observed; per-frame allocation count
+  stayed 3; explicit failure paths preserved target bytes in unit/integration
+  probes; no temporary DBG instrumentation remained in production/test sources.
 
 ## [0.2.0] - 2026-11-16
 
