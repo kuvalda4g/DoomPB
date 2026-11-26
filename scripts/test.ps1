@@ -16,13 +16,15 @@
     synthetic WAD/level/camera/online-visibility I01-I03 integration and optional
     real-IWAD catalog-aware I04, M3-05 vertical wall projection/tier rendering
     unit suite WP01-WP56, its synthetic WAD/level/camera/frame integration
-    WI01-WI03 and optional real-IWAD wall-render WI04, and smoke tests against
-    the produced executable: --version, --help, no-argument startup,
+    WI01-WI03 and optional real-IWAD wall-render WI04, M3-06 textured wall-column/
+    vanilla-lighting unit suite WT01-WT60, its synthetic texture/COLORMAP
+    integration TI01-TI03 and optional real-IWAD textured TI04, and smoke tests
+    against the produced executable: --version, --help, no-argument startup,
     unknown-option handling, --lump-info argument validation and nonblocking
     --show-title failures. No commercial game data and no display are needed for
     the synthetic suite. When -IwadPath supplies an owner-owned legal IWAD,
-    optional M3-03 I04, M3-04 I04, M3-05 WI04 and --map-info CLI checks
-    additionally run read-only on the same file.
+    optional M3-03 I04, M3-04 I04, M3-05 WI04, M3-06 TI04 and --map-info CLI
+    checks additionally run read-only on the same file.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -74,6 +76,9 @@ $wallClippingIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3WallClipIwadTests
 $wallProjectionTestExe = Join-Path $repoRoot 'build\DoomPB-WallProjectionTests.exe'
 $wallRenderIntegrationTestExe = Join-Path $repoRoot 'build\DoomPB-M3WallRenderTests.exe'
 $wallRenderIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3WallRenderIwadTests.exe'
+$wallTextureTestExe = Join-Path $repoRoot 'build\DoomPB-WallTextureTests.exe'
+$wallTextureIntegrationTestExe = Join-Path $repoRoot 'build\DoomPB-M3WallTextureTests.exe'
+$wallTextureIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3WallTextureIwadTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -93,11 +98,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest, [switch]$GeometryTest, [switch]$GeometryIntegrationTest, [switch]$GeometryIwadTest, [switch]$BspTest, [switch]$BspIntegrationTest, [switch]$BspIwadTest, [switch]$WallClippingTest, [switch]$WallClippingIntegrationTest, [switch]$WallClippingIwadTest, [switch]$WallProjectionTest, [switch]$WallRenderIntegrationTest, [switch]$WallRenderIwadTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest, [switch]$GeometryTest, [switch]$GeometryIntegrationTest, [switch]$GeometryIwadTest, [switch]$BspTest, [switch]$BspIntegrationTest, [switch]$BspIwadTest, [switch]$WallClippingTest, [switch]$WallClippingIntegrationTest, [switch]$WallClippingIwadTest, [switch]$WallProjectionTest, [switch]$WallRenderIntegrationTest, [switch]$WallRenderIwadTest, [switch]$WallTextureTest, [switch]$WallTextureIntegrationTest, [switch]$WallTextureIwadTest)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -606,9 +611,9 @@ Test-Condition ($wallRenderIntegrationOutput -match 'Cases: 3, assertions: 147, 
 
 Write-Host ''
 Write-Host '== M3-05 optional IWAD wall-render test build =='
-$status = Invoke-BuildStep -Check -WallRenderIwadTest
+$status = Invoke-BuildStep -Check -WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest
 Test-Condition ($status -eq 0) "M3-05 optional IWAD wall-render test syntax check exits with 0 (got $status)"
-$status = Invoke-BuildStep -WallRenderIwadTest
+$status = Invoke-BuildStep -WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest
 Test-Condition ($status -eq 0) "M3-05 optional IWAD wall-render test build exits with 0 (got $status)"
 Test-Condition (Test-Path -LiteralPath $wallRenderIwadTestExe -PathType Leaf) "M3-05 optional IWAD wall-render test output exists: $wallRenderIwadTestExe"
 if ($status -ne 0 -or -not (Test-Path -LiteralPath $wallRenderIwadTestExe -PathType Leaf)) {
@@ -641,6 +646,85 @@ if ([string]::IsNullOrWhiteSpace($IwadPath)) {
         Test-Condition ($wallRenderIwadOutput -match 'FNV-1a64 spans 8AC0627513C4B619, counters 83CAB0E1049B850A') "optional IWAD E1M2 M3-04 span/counters preserved"
         Test-Condition ($wallRenderIwadOutput -match 'FNV-1a64 spans 9FD0B15A0F33197E, counters CCAA2442EB270717') "optional IWAD E4M1 M3-04 span/counters preserved"
         Test-Condition ($wallRenderIwadOutput -match 'owner IWAD remains unchanged') "owner IWAD read-only size/MD5 unchanged"
+    }
+}
+
+Write-Host ''
+Write-Host '== M3-06 textured wall unit test build =='
+$status = Invoke-BuildStep -Check -WallTextureTest
+Test-Condition ($status -eq 0) "M3-06 textured wall unit test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -WallTextureTest
+Test-Condition ($status -eq 0) "M3-06 textured wall unit test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $wallTextureTestExe -PathType Leaf) "M3-06 textured wall unit test output exists: $wallTextureTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $wallTextureTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3-06 textured wall unit test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-06 textured wall unit tests (WT01-WT60) =='
+$wallTextureUnitOutput = & $wallTextureTestExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M3-06 textured wall unit tests exit with 0 (got $status)"
+Test-Condition ($wallTextureUnitOutput -match '(?m)^RESULT: PASS') "M3-06 WT01-WT60 reports PASS"
+Test-Condition ($wallTextureUnitOutput -match '\[WT60\]') "M3-06 unit suite actually executed WT60"
+
+Write-Host ''
+Write-Host '== M3-06 synthetic textured integration test build =='
+$status = Invoke-BuildStep -Check -WallTextureIntegrationTest
+Test-Condition ($status -eq 0) "M3-06 synthetic textured integration test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -WallTextureIntegrationTest
+Test-Condition ($status -eq 0) "M3-06 synthetic textured integration test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $wallTextureIntegrationTestExe -PathType Leaf) "M3-06 synthetic textured integration output exists: $wallTextureIntegrationTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $wallTextureIntegrationTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3-06 synthetic textured integration test build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-06 synthetic textured integration tests (TI01-TI03) =='
+$wallTextureIntegrationOutput = & $wallTextureIntegrationTestExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M3-06 textured integration tests exit with 0 (got $status)"
+Test-Condition ($wallTextureIntegrationOutput -match '(?m)^RESULT: PASS') "M3-06 TI01-TI03 reports PASS"
+Test-Condition ($wallTextureIntegrationOutput -match '\[TI03\]') "M3-06 synthetic integration actually executed TI03"
+
+Write-Host ''
+Write-Host '== M3-06 optional IWAD textured integration test build =='
+$status = Invoke-BuildStep -Check -WallTextureIwadTest
+Test-Condition ($status -eq 0) "M3-06 optional IWAD textured integration syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -WallTextureIwadTest
+Test-Condition ($status -eq 0) "M3-06 optional IWAD textured integration build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $wallTextureIwadTestExe -PathType Leaf) "M3-06 optional IWAD textured integration output exists: $wallTextureIwadTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $wallTextureIwadTestExe -PathType Leaf)) {
+    Write-Host "Aborting: M3-06 optional IWAD textured integration build failed." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-06 optional IWAD textured integration tests (TI04) =='
+if ([string]::IsNullOrWhiteSpace($IwadPath)) {
+    $wallTextureIwadOutput = & $wallTextureIwadTestExe 2>&1 | Out-String
+    $status = $LASTEXITCODE
+    Test-Condition ($status -eq 0) "optional M3-06 IWAD textured tests exit with 0 without a path (got $status)"
+    Test-Condition ($wallTextureIwadOutput -match 'NOT RUN') "optional M3-06 IWAD textured tests report NOT RUN without a path"
+} else {
+    Test-Condition (Test-Path -LiteralPath $IwadPath -PathType Leaf) "explicit owner IWAD path exists for M3-06"
+    if (Test-Path -LiteralPath $IwadPath -PathType Leaf) {
+        $wallTextureIwadOutput = & $wallTextureIwadTestExe $IwadPath 2>&1 | Out-String
+        $status = $LASTEXITCODE
+        Test-Condition ($status -eq 0) "optional M3-06 IWAD textured E1M1/E1M2/E4M1 integration exits with 0 (got $status)"
+        Test-Condition ($wallTextureIwadOutput -match '(?m)^RESULT: PASS') "optional M3-06 IWAD textured integration reports PASS"
+        Test-Condition ($wallTextureIwadOutput -match 'E1M1.*transactional textured frame') "optional M3-06 actually rendered E1M1 textured frame"
+        Test-Condition ($wallTextureIwadOutput -match 'E1M2.*transactional textured frame') "optional M3-06 actually rendered E1M2 textured frame"
+        Test-Condition ($wallTextureIwadOutput -match 'E4M1.*transactional textured frame') "optional M3-06 actually rendered E4M1 textured frame"
+        Test-Condition ($wallTextureIwadOutput -match 'frozen M3-05 debug frame hash 4A923E4D357C7BD1 preserved') "optional M3-06 E1M1 M3-05 debug hash preserved"
+        Test-Condition ($wallTextureIwadOutput -match 'frozen M3-05 debug frame hash 0C9627E5C2FD8D35 preserved') "optional M3-06 E1M2 M3-05 debug hash preserved"
+        Test-Condition ($wallTextureIwadOutput -match 'frozen M3-05 debug frame hash 9AEB8BDD16834359 preserved') "optional M3-06 E4M1 M3-05 debug hash preserved"
+        Test-Condition ($wallTextureIwadOutput -match 'frozen M3-04 span fingerprint 74B485154CE29B0B preserved') "optional M3-06 E1M1 M3-04 span hash preserved"
+        Test-Condition ($wallTextureIwadOutput -match 'frozen M3-04 counter fingerprint 7ADB45DBF2611B77 preserved') "optional M3-06 E1M1 M3-04 counter hash preserved"
+        Test-Condition ($wallTextureIwadOutput -match 'repeat full 64,000-byte textured frame byte-for-byte identical') "optional M3-06 textured frames repeat byte-for-byte"
+        Test-Condition ($wallTextureIwadOutput -match 'owner IWAD remains unchanged') "optional M3-06 owner IWAD read-only size/MD5 unchanged"
     }
 }
 

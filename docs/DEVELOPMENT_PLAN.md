@@ -269,7 +269,7 @@ Linux x64 — **NOT RUN**. Коммит/тег `v0.2.0` создаёт влад�
 
 ### M3 — Геометрия и первые стены (`v0.3.0`)
 
-**Основные модули:** `Fixed.pbi`, `Geometry.pbi`, `BSP.pbi`, `WallVisibility.pbi`, `WallView.pbi`, `WallProject.pbi`, `WallDraw.pbi`, `RenderMain.pbi`.
+**Основные модули:** `Fixed.pbi`, `Geometry.pbi`, `BSP.pbi`, `WallVisibility.pbi`, `WallView.pbi`, `WallProject.pbi`, `WallDraw.pbi`, `RenderMain.pbi`, `WallTextureMapping.pbi`, `WallTextureCache.pbi`, `WallLighting.pbi`, `TexturedWallDraw.pbi`, `TexturedRenderMain.pbi`.
 
 - [x] Перенести fixed-point операции и необходимые lookup/trigonometry tables (M3-01/M3-02, Windows x64).
 - [x] Реализовать точную экранную горизонтальную проекцию и FOV-углы: `R_InitTextureMapping`, `viewangletox`/`xtoviewangle`/`clipangle` M3-04 для канонического 320-column viewport; полная вертикальная wall projection теперь реализована M3-05.
@@ -281,9 +281,9 @@ Linux x64 — **NOT RUN**. Коммит/тег `v0.2.0` создаёт влад�
 - [x] Реализовать headless solid/pass wall clipping с inclusive интервалами,
       owned solidsegs-эквивалентом и реальным occlusion state (M3-04).
 - [x] Реализовать вертикальную wall projection `R_StoreWallRange`/`R_ScaleFromGlobalAngle` и отрисовку одноцветных middle/upper/lower колонок с точным clip по экрану (M3-05, Windows x64; debug palette indices 0/176/252/96). Полный vanilla `drawseg_t` records всё ещё отложен: кадр использует caller-owned `WallSpanPlan` numeric metadata.
-- [ ] Добавить верхние/нижние/middle wall textures и masked midtexture clipping по экрану (geometry/tier positions уже реализованы M3-05; texture sampling/COLORMAP/lighting отсутствуют).
-- [ ] Сравнивать результирующие textured frame hashes / изображения с эталонной сборкой при одинаковых позициях камеры (M3-05 проверяет детерминированные debug-color hashes independently; эталонная textured сборка ещё не доступна).
-- [ ] Замерять время CPU на кадр и отсутствие лишних аллокаций внутри горячего цикла (M3-05 требует 3 checked allocations/frame, но CPU timing не измерен).
+- [x] M3-06 textured wall-column/COLORMAP lighting: upper/lower/middle wall textures с точным `rw_offset`/width-mask texturecolumn, unsigned `dc_iscale`, pegged `dc_texturemid`, owned used-texture cache и vanilla `scalelight[16][48]` COLORMAP lighting (Windows x64). Masked two-sided middle textures detected/deferred, не рисуются opaque; masked midtexture clipping по экрану остаётся за M3-06 scope (back-to-front drawseg/sprite-style M4).
+- [ ] Сравнивать результирующие textured frame hashes / изображения с эталонной сборкой при одинаковых позициях камеры (M3-06 synthetic TI01/TI02 full frames/samples/plans/hashes сверены с независимым Python oracle; owner E1M1/E1M2/E4M1 stable textured hashes визуально/repeat подтверждены, но не закреплены как frozen goldens, поскольку независимое C-equivalent sampling и эталонная textured C сборка недоступны).
+- [ ] Замерять время CPU на кадр и отсутствие лишних аллокаций внутри горячего цикла (M3-05 требует 3 checked allocations/frame; M3-06 observes allocations до per-column loop, но CPU timing не измерен).
 
 **Критерий готовности:** из фиксированной камеры в E1M1 видны **правильно расположенные и текстурированные стены** без заметных геометрических артефактов; можно воспроизвести один и тот же кадр.
 
@@ -298,10 +298,28 @@ interpolation plans, transactional 320x200 wall-only кадр и отрисов�
 middle/upper/lower tiers реализованы и протестированы на Windows x64 (PB 6.41)
 в рабочем дереве. M3-04 публикует owned числовые экранные интервалы/счётчики;
 M3-05 рисует **debug palette indices** (0/176/252/96), поддерживает M3-04 order/
-occlusion и выдаёт canonical FNV-1a64 кадра, но не текстурные/lighting/sky/flat/
-sprite pixels. `drawseg_t`, texture sampling, COLORMAP lighting, visplanes/sky,
-sprites, planes и полный world renderer остаются M3/M4+. Версия остаётся
-`0.2.0`; `v0.3.0` не подготовлен; Linux x64 — NOT RUN.
+occlusion и выдаёт canonical FNV-1a64 кадра. M3-06 добавляет **textured wall
+columns** для тех же tiers через existing `TextureCatalog`/`TextureCompose`/
+`Colormap`/`FrameBuffer`: exact `rw_offset`/`rw_centerangle` texturecolumn, vanilla
+width mask, unsigned `dc_iscale`, pegged middle/upper/lower `dc_texturemid`, owned
+used-texture cache и static 320-column `scalelight[16][48]` COLORMAP lighting;
+`<128` height rows bounded/documented/fallback-counted, uncovered mask0 routed
+through composed index-0/mask-0 policy and counted, masked two-sided middle
+textures detected/deferred (never opaque), floors/ceilings/sky/sprites/masked
+back-to-front overlays deferred to M4+. Actual Windows tests: WT01–WT60 **60/545/0**,
+TI01–TI03 **3/116/0**, optional owner TI04 **1/128/0**; synthetic full-pipeline
+TI01/TI02 frames equal independent fixture hashes `119A71B79384D465`/
+`F05D55B8FE8C07EB` и M3-04 span fingerprints `3EE9969A4FF10052`/
+`2FAA660491199243` unchanged; legacy M3-05 debug hashes `4A923E4D357C7BD1`/
+`0C9627E5C2FD8D35`/`9AEB8BDD16834359` and M3-04 fingerprint pairs preserved.
+Owner E1M1/E1M2/E4M1 stable textured hashes `183BA53FCECECBC8`/
+`835A0339A38B190E`/`03B5C8CFA517FC7E` repeat byte-identical and were visually
+reviewed at 960×600, но **not frozen** pending independent C-equivalent sampling.
+`drawseg_t`, masked back-to-front drawing, planes/sky/sprites and full world
+renderer остаются M3/M4+. Aggregate actual Windows scripts: no-owner **692/5,595/0**
+and `scripts/test.ps1` 148/148; owner path **699/6,253/0** and 193/193 (actual).
+Версия остаётся `0.2.0`; `v0.3.0` не подготовлен; Linux x64 — **NOT RUN**; CPU
+timing не измерен.
 
 ### M4 — Полный программный рендерер (`v0.4.0`)
 

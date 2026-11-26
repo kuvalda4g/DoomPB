@@ -14,13 +14,15 @@
 # WC01-WC52, its synthetic WAD/level/camera/online-visibility integration
 # I01-I03 and optional real-IWAD catalog-aware I04, M3-05 vertical wall
 # projection/tier rendering unit WP01-WP56, its synthetic WAD/level/camera/
-# frame integration WI01-WI03 and optional real-IWAD wall-render WI04, and
+# frame integration WI01-WI03 and optional real-IWAD wall-render WI04, M3-06
+# textured wall-column/vanilla-lighting unit WT01-WT60, its synthetic texture/
+# COLORMAP integration TI01-TI03 and optional real-IWAD textured TI04, and
 # smoke tests against the produced executable: --version, --help, no-argument
 # startup, unknown-option handling, --lump-info argument validation and
 # nonblocking --show-title failures. No commercial game data and no display
 # are needed for the synthetic suite. When IWAD_PATH points at an owner-owned
-# legal IWAD, optional M3-03 I04, M3-04 I04, M3-05 WI04 and --map-info CLI
-# checks additionally run read-only.
+# legal IWAD, optional M3-03 I04, M3-04 I04, M3-05 WI04, M3-06 TI04 and
+# --map-info CLI checks additionally run read-only.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -56,6 +58,9 @@ WALL_CLIPPING_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallClipIwadTests"
 WALL_PROJECTION_TEST_BIN="${REPO_ROOT}/build/DoomPB-WallProjectionTests"
 WALL_RENDER_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallRenderTests"
 WALL_RENDER_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallRenderIwadTests"
+WALL_TEXTURE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WallTextureTests"
+WALL_TEXTURE_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallTextureTests"
+WALL_TEXTURE_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallTextureIwadTests"
 IWAD_PATH="${IWAD_PATH:-}"
 CHECKS=0
 FAILURES=0
@@ -1522,6 +1527,241 @@ else
         printf 'PASS: owner IWAD read-only size/MD5 unchanged\n'
     else
         printf 'FAIL: owner IWAD unchanged verification missing\n%s\n' "${wall_render_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+fi
+
+printf '\n== M3-06 textured wall unit test build ==\n'
+run_build --check --wall-texture-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-06 textured wall unit test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-06 textured wall unit test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-06 textured wall unit test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --wall-texture-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-06 textured wall unit test build exits with 0\n'
+else
+    printf 'FAIL: M3-06 textured wall unit test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-06 textured wall unit test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${WALL_TEXTURE_TEST_BIN}" ]; then
+    printf 'PASS: M3-06 textured wall unit test output exists: %s\n' "${WALL_TEXTURE_TEST_BIN}"
+else
+    printf 'FAIL: M3-06 textured wall unit test output missing: %s\n' "${WALL_TEXTURE_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-06 textured wall unit test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-06 textured wall unit tests (WT01-WT60) ==\n'
+wall_texture_unit_output="$("${WALL_TEXTURE_TEST_BIN}" 2>&1)"
+wall_texture_unit_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${wall_texture_unit_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-06 textured wall unit tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-06 textured wall unit tests exit with %s\n' "${wall_texture_unit_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${wall_texture_unit_output}" | grep -Eq -- '^RESULT: PASS'; then
+    printf 'PASS: M3-06 WT01-WT60 reports PASS\n'
+else
+    printf 'FAIL: M3-06 textured wall unit suite did not report PASS\n%s\n' "${wall_texture_unit_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${wall_texture_unit_output}" | grep -q -- '[WT60]'; then
+    printf 'PASS: M3-06 unit suite actually executed WT60\n'
+else
+    printf 'FAIL: M3-06 WT60 execution marker missing\n%s\n' "${wall_texture_unit_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-06 synthetic textured integration test build ==\n'
+run_build --check --wall-texture-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-06 synthetic textured integration test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-06 synthetic textured integration test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-06 synthetic textured integration test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --wall-texture-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-06 synthetic textured integration test build exits with 0\n'
+else
+    printf 'FAIL: M3-06 synthetic textured integration test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-06 synthetic textured integration test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${WALL_TEXTURE_INTEGRATION_TEST_BIN}" ]; then
+    printf 'PASS: M3-06 synthetic textured integration output exists: %s\n' "${WALL_TEXTURE_INTEGRATION_TEST_BIN}"
+else
+    printf 'FAIL: M3-06 synthetic textured integration output missing: %s\n' "${WALL_TEXTURE_INTEGRATION_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-06 synthetic textured integration output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-06 synthetic textured integration tests (TI01-TI03) ==\n'
+wall_texture_integration_output="$("${WALL_TEXTURE_INTEGRATION_TEST_BIN}" 2>&1)"
+wall_texture_integration_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${wall_texture_integration_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-06 textured integration tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-06 textured integration tests exit with %s\n' "${wall_texture_integration_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${wall_texture_integration_output}" | grep -Eq -- '^RESULT: PASS'; then
+    printf 'PASS: M3-06 TI01-TI03 reports PASS\n'
+else
+    printf 'FAIL: M3-06 synthetic textured integration did not report PASS\n%s\n' "${wall_texture_integration_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${wall_texture_integration_output}" | grep -q -- '[TI03]'; then
+    printf 'PASS: M3-06 synthetic textured integration actually executed TI03\n'
+else
+    printf 'FAIL: M3-06 TI03 execution marker missing\n%s\n' "${wall_texture_integration_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+printf '\n== M3-06 optional IWAD textured integration test build ==\n'
+run_build --check --wall-texture-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-06 optional IWAD textured integration syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-06 optional IWAD textured integration syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-06 optional IWAD textured integration syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --wall-texture-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-06 optional IWAD textured integration build exits with 0\n'
+else
+    printf 'FAIL: M3-06 optional IWAD textured integration build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-06 optional IWAD textured integration build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${WALL_TEXTURE_IWAD_TEST_BIN}" ]; then
+    printf 'PASS: M3-06 optional IWAD textured integration output exists: %s\n' "${WALL_TEXTURE_IWAD_TEST_BIN}"
+else
+    printf 'FAIL: M3-06 optional IWAD textured integration output missing: %s\n' "${WALL_TEXTURE_IWAD_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-06 optional IWAD textured integration output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-06 optional IWAD textured integration tests (TI04) ==\n'
+if [ -z "${IWAD_PATH}" ]; then
+    wall_texture_iwad_output="$("${WALL_TEXTURE_IWAD_TEST_BIN}" 2>&1)"
+    wall_texture_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${wall_texture_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional M3-06 IWAD textured tests exit with 0 without a WAD path\n'
+    else
+        printf 'FAIL: optional M3-06 IWAD textured tests exit with %s\n' "${wall_texture_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_texture_iwad_output}" | grep -q -- 'NOT RUN'; then
+        printf 'PASS: optional M3-06 IWAD textured tests report NOT RUN without a path\n'
+    else
+        printf 'FAIL: optional M3-06 IWAD textured tests did not report NOT RUN\n%s\n' "${wall_texture_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    CHECKS=$((CHECKS + 1))
+    if [ -f "${IWAD_PATH}" ]; then
+        printf 'PASS: explicit owner IWAD path exists for M3-06\n'
+    else
+        printf 'FAIL: explicit owner IWAD path does not exist for M3-06\n' >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    wall_texture_iwad_output="$("${WALL_TEXTURE_IWAD_TEST_BIN}" "${IWAD_PATH}" 2>&1)"
+    wall_texture_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${wall_texture_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional M3-06 IWAD textured integration exits with 0\n'
+    else
+        printf 'FAIL: optional M3-06 IWAD textured integration exits with %s\n' "${wall_texture_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_texture_iwad_output}" | grep -Eq -- '^RESULT: PASS'; then
+        printf 'PASS: optional M3-06 IWAD textured integration reports PASS\n'
+    else
+        printf 'FAIL: optional M3-06 IWAD textured integration did not report PASS\n%s\n' "${wall_texture_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    for map_name in E1M1 E1M2 E4M1; do
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${wall_texture_iwad_output}" |
+            grep -q -- "${map_name} transactional textured frame"; then
+            printf 'PASS: optional M3-06 actually rendered %s textured frame\n' "${map_name}"
+        else
+            printf 'FAIL: optional M3-06 %s textured frame measurement missing\n%s\n' "${map_name}" "${wall_texture_iwad_output}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
+    for hash in 4A923E4D357C7BD1 0C9627E5C2FD8D35 9AEB8BDD16834359; do
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${wall_texture_iwad_output}" | grep -q -- "${hash}"; then
+            printf 'PASS: optional M3-06 M3-05 debug hash %s preserved\n' "${hash}"
+        else
+            printf 'FAIL: optional M3-06 M3-05 debug hash %s missing\n%s\n' "${hash}" "${wall_texture_iwad_output}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
+    for fingerprint in 74B485154CE29B0B 7ADB45DBF2611B77 8AC0627513C4B619 83CAB0E1049B850A 9FD0B15A0F33197E CCAA2442EB270717; do
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${wall_texture_iwad_output}" | grep -q -- "${fingerprint}"; then
+            printf 'PASS: optional M3-06 M3-04 fingerprint %s preserved\n' "${fingerprint}"
+        else
+            printf 'FAIL: optional M3-06 M3-04 fingerprint %s missing\n%s\n' "${fingerprint}" "${wall_texture_iwad_output}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_texture_iwad_output}" | grep -q -- 'repeat full 64,000-byte textured frame byte-for-byte identical'; then
+        printf 'PASS: optional M3-06 textured frames repeat byte-for-byte\n'
+    else
+        printf 'FAIL: optional M3-06 textured repeat measurement missing\n%s\n' "${wall_texture_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${wall_texture_iwad_output}" | grep -Eq -- 'owner IWAD remains unchanged'; then
+        printf 'PASS: optional M3-06 owner IWAD read-only unchanged\n'
+    else
+        printf 'FAIL: optional M3-06 owner IWAD unchanged verification missing\n%s\n' "${wall_texture_iwad_output}" >&2
         FAILURES=$((FAILURES + 1))
     fi
 fi

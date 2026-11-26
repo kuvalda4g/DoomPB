@@ -15,6 +15,10 @@
     -WallRenderIntegrationTest (WI01-WI03 synthetic frames) and
     -WallRenderIwadTest (optional WI04 owner-IWAD frames).
 
+    M3-06 variant targets are -WallTextureTest (WT01-WT60 unit suite),
+    -WallTextureIntegrationTest (TI01-TI03 synthetic frames) and
+    -WallTextureIwadTest (optional TI04 owner-IWAD textured frames).
+
 .PARAMETER Check
     Run only the PureBasic syntax check; no executable is produced.
 
@@ -118,6 +122,18 @@
     Build the optional M3-05 real-IWAD wall visibility/frame integration test
     program (tests/integration/m3_wall_render_iwad_tests.pb) instead of the main executable.
 
+.PARAMETER WallTextureTest
+    Build the M3-06 textured wall-column/vanilla-lighting unit test program
+    (tests/unit/wall_texture_tests.pb) instead of the main executable.
+
+.PARAMETER WallTextureIntegrationTest
+    Build the M3-06 synthetic WAD/texture frame/COLORMAP integration test program
+    (tests/integration/m3_wall_texture_tests.pb) instead of the main executable.
+
+.PARAMETER WallTextureIwadTest
+    Build the optional M3-06 real-IWAD textured wall integration program
+    (tests/integration/m3_wall_texture_iwad_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -199,6 +215,15 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -WallRenderIwadTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -WallTextureTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -WallTextureIntegrationTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -WallTextureIwadTest
 #>
 [CmdletBinding()]
 param(
@@ -228,6 +253,9 @@ param(
     [switch]$WallProjectionTest,
     [switch]$WallRenderIntegrationTest,
     [switch]$WallRenderIwadTest,
+    [switch]$WallTextureTest,
+    [switch]$WallTextureIntegrationTest,
+    [switch]$WallTextureIwadTest,
     [string]$CompilerPath = ''
 )
 
@@ -263,12 +291,24 @@ if ($WallClippingIwadTest) { $selectedTargets++ }
 if ($WallProjectionTest) { $selectedTargets++ }
 if ($WallRenderIntegrationTest) { $selectedTargets++ }
 if ($WallRenderIwadTest) { $selectedTargets++ }
+if ($WallTextureTest) { $selectedTargets++ }
+if ($WallTextureIntegrationTest) { $selectedTargets++ }
+if ($WallTextureIwadTest) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($WallRenderIwadTest) {
+if ($WallTextureIwadTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_wall_texture_iwad_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3WallTextureIwadTests.exe'
+} elseif ($WallTextureIntegrationTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_wall_texture_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3WallTextureTests.exe'
+} elseif ($WallTextureTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\wall_texture_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-WallTextureTests.exe'
+} elseif ($WallRenderIwadTest) {
     $sourceFile = Join-Path $repoRoot 'tests\integration\m3_wall_render_iwad_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-M3WallRenderIwadTests.exe'
 } elseif ($WallRenderIntegrationTest) {

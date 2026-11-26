@@ -5,8 +5,8 @@ in **PureBasic**. The goal is to reproduce the behaviour of id Software's
 **Linux Doom 1.10** — software renderer, fixed-point arithmetic, 35 Hz game
 ticks and WAD compatibility — rather than to reimagine it.
 
-> **Status: `0.2.0` — milestone M2 complete on Windows x64; M3-05 wall layer in
-> the working tree (owner commit/tag pending).**
+> **Status: `0.2.0` — milestone M2 complete on Windows x64; M3-05/M3-06 wall
+> layers in the working tree (owner commit/tag pending).**
 > The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`,
 > `COLORMAP`, `PNAMES`, `TEXTURE1`/`TEXTURE2`, composites titles and wall
 > textures, reads flats and sprite metadata, and presents `TITLEPIC` in a native
@@ -34,11 +34,18 @@ ticks and WAD compatibility — rather than to reimagine it.
 > order/occlusion, writes no texture/flat/sky/light/sprite pixels, emits a
 > canonical FNV-1a64 over the exact 64,000 row-major palette bytes, and adds an
 > opt-in `--iwad <path> --show-walls <ExMy>` 3x preview from the validated
-> player-one start. Drawsegs, textured/masked columns, planes, sky, lighting,
-> sprites and the full world renderer remain later M3/M4 steps. Gameplay, UI and
-> audio are still pending, M3 as a whole is not complete and `v0.3.0` is not
-> prepared. The application version remains `0.2.0`. Linux x64 runtime is
-> **NOT RUN**. No Git tag exists until the owner creates it.
+> player-one start. M3-06 adds opt-in **textured wall columns** for the existing
+> middle/upper/lower tier geometry: exact `rw_offset`/`rw_centerangle`, texture
+> column width mask, `dc_iscale` stepping, pegged middle/upper/lower
+> `dc_texturemid` with `ML_DONTPEGTOP`/`ML_DONTPEGBOTTOM`, bounded <128-height
+> source rows, and static vanilla `scalelight[16][48]` `COLORMAP` lighting. It
+> composes only used visible-tier textures, owns them until frame commit, preserves
+> the old debug frame/hashes and adds `--iwad <path> --show-textured-walls <ExMy>`
+> at 3x. Two-sided masked midtextures are detected and deferred; floors,
+> ceilings, sky, plan flats, masked overlays, sprites and animation remain later
+> M4 steps. M3 as a whole is not complete and `v0.3.0` is not prepared. The
+> application version remains `0.2.0`. Linux x64 runtime is **NOT RUN**. No Git
+> tag exists until the owner creates it.
 
 ## Legal notice
 
@@ -148,6 +155,15 @@ repository.
 # Build the optional M3-05 real-IWAD frame tests -> build/DoomPB-M3WallRenderIwadTests.exe
 ./scripts/build.ps1 -WallRenderIwadTest
 
+# Build the M3-06 textured wall-column/COLORMAP tests -> build/DoomPB-WallTextureTests.exe
+./scripts/build.ps1 -WallTextureTest
+
+# Build the M3-06 synthetic texture/lighting frame tests -> build/DoomPB-M3WallTextureTests.exe
+./scripts/build.ps1 -WallTextureIntegrationTest
+
+# Build the optional M3-06 real-IWAD textured frame tests -> build/DoomPB-M3WallTextureIwadTests.exe
+./scripts/build.ps1 -WallTextureIwadTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -236,6 +252,15 @@ repository.
 # Build the optional M3-05 real-IWAD frame tests -> build/DoomPB-M3WallRenderIwadTests
 ./scripts/build.sh --wall-render-iwad-test
 
+# Build the M3-06 textured wall-column/COLORMAP tests -> build/DoomPB-WallTextureTests
+./scripts/build.sh --wall-texture-test
+
+# Build the M3-06 synthetic texture/lighting frame tests -> build/DoomPB-M3WallTextureTests
+./scripts/build.sh --wall-texture-integration-test
+
+# Build the optional M3-06 real-IWAD textured frame tests -> build/DoomPB-M3WallTextureIwadTests
+./scripts/build.sh --wall-texture-iwad-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
@@ -253,8 +278,10 @@ the M3-02 synthetic geometry integration suite, the M3-03 BSP traversal suite
 screen-projection/wall-clipping/occlusion suite (WC01-WC52), its synthetic
 WAD/level/camera/online-visibility integration (I01-I03), the M3-05 vertical wall
 projection/tier suite (WP01-WP56), its synthetic WAD/level/camera/frame
-integration (WI01-WI03) and all optional IWAD harnesses (NOT RUN without a
-supplied path), plus smoke tests against the produced executable. They need no
+integration (WI01-WI03), the M3-06 textured wall-column/`COLORMAP` lighting suite
+(WT01-WT60), its synthetic texture/frame integration (TI01-TI03) and all optional
+IWAD harnesses (NOT RUN without a supplied path), plus smoke tests against the
+produced executable. They need no
 game data and no graphical display for the synthetic suite; no window is opened
 by the automated suite without an explicit IWAD path. `--show-title` and
 `--show-walls` remain owner/GUI interactive checks.
@@ -263,14 +290,14 @@ by the automated suite without an explicit IWAD path. `--show-title` and
 ./scripts/test.ps1     # Windows; synthetic only, optional IWAD I04 NOT RUN
 
 ./scripts/test.ps1 -IwadPath 'D:\path\to\legally-owned\DOOM.WAD'
-# Windows; adds read-only M3-03/M3-04 I04, M3-05 WI04 and --map-info CLI checks
+# Windows; adds read-only M3-03/M3-04 I04, M3-05 WI04, M3-06 TI04 and --map-info CLI checks
 ```
 
 ```bash
 ./scripts/test.sh      # Linux; synthetic only, optional IWAD I04 NOT RUN
 
 IWAD_PATH=/path/to/legally-owned/DOOM.WAD ./scripts/test.sh
-# Linux; adds read-only M3-03/M3-04 I04, M3-05 WI04 and --map-info CLI checks
+# Linux; adds read-only M3-03/M3-04 I04, M3-05 WI04, M3-06 TI04 and --map-info CLI checks
 ```
 
 A test run fails with a non-zero exit code if any check fails.
@@ -286,6 +313,9 @@ DoomPB --iwad <path> --show-title        Show TITLEPIC in a 3x window.
 DoomPB --iwad <path> --map-info <ExMy>   Load and validate a vanilla map.
 DoomPB --iwad <path> --show-walls <ExMy> Render an M3-05 wall-only debug-color
                                         320x200 frame from the player-one start at 3x.
+DoomPB --iwad <path> --show-textured-walls <ExMy>
+                                        Render an M3-06 textured wall-only
+                                        COLORMAP-lit 320x200 frame at 3x.
 DoomPB                                   Print the bootstrap status and exit.
 ```
 

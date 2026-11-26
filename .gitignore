@@ -19,6 +19,8 @@ dist/
 *.pbf
 purebasic.asm
 purebasic.c
+__pycache__/
+*.pyc
 
 # Personal IDE/OS files
 .vscode/

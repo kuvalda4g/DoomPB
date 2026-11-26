@@ -3,18 +3,21 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
-## [Unreleased] - M3 math, BAM angle, geometry, BSP traversal, screen projection/wall clipping, vertical wall projection/frame
+## [Unreleased] - M3 math, BAM angle, geometry, BSP traversal, screen projection/wall clipping, vertical wall projection/frame, textured wall columns/COLORMAP lighting
 
 M3 is not complete; the application version remains `0.2.0`. No tag or release
-is created for this increment. M3-01, M3-02, M3-03, M3-04 and M3-05 modules/tests
-are in the working tree. M3-04 produces headless, owned numeric screen-column
-visibility intervals and counters. M3-05 adds checked static viewz, exact
-`R_StoreWallRange`/`R_ScaleFromGlobalAngle` vertical projection and 12-bit
+is created for this increment. M3-01, M3-02, M3-03, M3-04, M3-05 and M3-06
+modules/tests are in the working tree. M3-04 produces headless, owned numeric
+screen-column visibility intervals and counters. M3-05 adds checked static viewz,
+exact `R_StoreWallRange`/`R_ScaleFromGlobalAngle` vertical projection and 12-bit
 interpolation, a transactional 320x200 wall-only frame with one-color middle/
 upper/lower tiers, a canonical 64,000-byte frame hash and an opt-in player-start
-preview. Textured/masked wall columns, COLORMAP/lighting, complete vanilla
-`drawseg_t`, visplanes/flats, sky, sprites and the full world renderer remain
-later steps.
+preview. M3-06 adds actual composed wall-texture columns for the same tiers,
+exact horizontal texture coordinates/width masks, `dc_iscale` vertical stepping,
+pegging texturemids and vanilla `scalelight[16][48]` `COLORMAP` lighting, plus its
+own opt-in preview, while preserving all M3-05 debug colors/hashes. Complete
+vanilla `drawseg_t`, masked midtexture back-to-front drawing, visplanes/flats, sky,
+sprites and the full world renderer remain later steps.
 
 ### Added
 
@@ -226,6 +229,87 @@ later steps.
   lifetime, actual frame hashes/counters, GUI visual status, cumulative totals
   and remaining textured/plane/sprite/gameplay gaps.
 
+M3-06 textured wall columns and vanilla lighting:
+
+- `src/Renderer/WallTextureMapping.pbi`: checked source helpers for exact
+  `rw_offset` (`offsetangle` unsigned comparisons/clamp/sign, `finesine` lookup,
+  signed fixed product and separate `SIDEDEFS.textureoffset`/`SEGS.offset`
+  additions), `rw_centerangle`, per-X `finetangent` texturecolumn, vanilla width
+  mask (highest power of two ≤ width − 1), unsigned `&` wrap, `dc_iscale =
+  0xFFFFFFFF / unsigned(scale)`, 16.16 `frac` start/advance, exact `&127` rows for
+  ≥128 heights and bounded modulo-height source rows for <128 heights, one-sided/
+  upper/lower pegged `dc_texturemid` helpers and uncovered-mask reporting.
+- `src/Renderer/WallTextureCache.pbi`: one entry per distinct visible painted-tier
+  TextureCatalog index, each owning an embedded M2-composed `TextureImage`
+  pixel+mask plane through existing `TextureCompose`; first/duplicate-name
+  catalog resolution, side 0/1 top/bottom-then-middle field selection, canonical
+  absent `-`/all-NUL and original index-0 NoTexture handling, tier-flag gating,
+  masked two-sided middles detected/counted but not composed/painted, checked
+  width-mask/height metadata, exact unique-count entries and budgeted allocation,
+  transactional reset/failure cleanup, no borrowed WAD/map/catalog pointer after
+  build, explicit reopen invalidation contract (no stale lump index reuse).
+- `src/Renderer/WallLighting.pbi`: pinned `LIGHTLEVELS=16`, `LIGHTSEGSHIFT=4`,
+  `MAXLIGHTSCALE=48`, `LIGHTSCALESHIFT=12`, `NUMCOLORMAPS=32`, `DISTMAP=2`;
+  classic full-detail 320-column `startmap=(15-i)*4` / `level=startmap-j/2`
+  truncation/clamp table, front-sector light row with source horizontal (`--`)/
+  vertical (`++`) corrections and 0..15 clamp, `scale>>12` 0..47 column index,
+  `colormap[map][texel]` mapping; ≥32-table `COLORMAP` gate; numeric map indexes
+  not borrowed table pointers; `extralight=0`; dynamic/fixedcolormap deferred.
+- `src/Renderer/TexturedWallDraw.pbi`: M3-05 tier/clip ordering byte-for-byte,
+  replacing solid palette indices with composed texels mapped through
+  `scalelight`; inclusive `dc_yl..dc_yh`, shared ceiling/floor clip, per-X scale/
+  topfrac/bottomfrac steps, one-sided middle closes 200/-1, upper pixhigh / lower
+  pixlow steps, only clip side effects for deferred planes/markfloor/sky/sprites;
+  bounded source column/row/palette/screen checks; mask=0 uncovered texels use the
+  M2 composed index-0/mask-0 policy routed through COLORMAP and counted; 255 stays
+  opaque; no per-column/per-pixel allocation; atomic tally publication per span.
+- `src/Renderer/TexturedRenderMain.pbi`: transactional textured frame orchestration
+  using M3-04 spans as sole authority and one M3-05 `WallSpanPlan` per span; builds
+  used-texture cache and 16×48 light table, creates one `WallTextureSpanPlan`
+  per span carrying numeric texture slots/heights/masks/pegging mids/raw offset/
+  center/light row, one 2,560-byte clip and one private 64,000-byte background frame;
+  target publication only on whole-frame success, failure frees every private/cache/
+  metadata resource and leaves caller target bytes unchanged; result owns numeric
+  copied plans/counters/hash only; no MapLevel/WAD/catalog/cache/frame/table/texture
+  pointer retained; canonical FNV-1a64/16 uppercase hex over exact palette bytes.
+- `src/DoomPB.pb`: opt-in `--iwad <path> --show-textured-walls <ExMy>` loads the
+  existing WAD→PLAYPAL/PNAMES/TEXTURE1/2/flat catalog→validated map→projection→
+  player-one view→M3-04 visibility→M3-05 plans pipeline plus `COLORMAP` and cache,
+  renders one textured 320x200 frame at 3x, prints detailed counters/hash; old
+  `--show-walls` debug mode remains pixel/hash identical; conflicts, help, usage and
+  exit codes extended while old behavior/version `0.2.0` stay unchanged.
+- Independent generator `scripts/gen_wall_texture_golden.py` and tracked
+  synthetic-only `tests/fixtures/m3_wall_texture_golden.pbi`: published geometry
+  oracle plus separate integer/material/scalelight/COLORMAP formulas compute
+  TI01/TI02 full 64,000-byte frames, hashes, independent M3-04 span fingerprints,
+  samples, span/62-field plan vectors, cache/types/counters; no commercial bytes or
+  production renderer output.
+- `tests/unit/wall_texture_tests.pb`: WT01-WT60 **60 cases / 545 assertions**, all
+  required catalog/side selection/null/malformed/duplicate/reopen/cache ownership/
+  mask/offset/column/iscale/frac/row/peg/tier/portal/closed-door/clip/COLORMAP/
+  scalelight/lights/scale-index/mapping/masked-ordering/frame-rollback/FNV/legacy
+  and nearest-neighbour categories with synthetic oracles.
+- `tests/integration/m3_wall_texture_tests.pb`: TI01-TI03 **3 cases / 116
+  assertions** through real self-authored WAD/texture/COLORMAP/map APIs; full
+  synthetic frames/hashes/samples/plans/counters equal independent fixtures, A-B-A
+  reopened cache invalidation, stale-patch rejection, repeats/reset, late failure
+  rollback, missing TEXTURE1/PNAMES/COLORMAP recovery.
+- `tests/integration/m3_wall_texture_iwad_tests.pb`: optional TI04 **1 case / 128
+  assertions** E1M1/E1M2/E4M1 read-only, real texture pixels/counters, repeat full
+  plane byte equality, M3-04/M3-05 fingerprints preserved; stable new hashes are
+  printed `NOT LOCKED` pending independent C-equivalent sampling (visual/repeat
+  evidence only).
+- `tests/integration/wall_texture_support.pbi`: synthetic PWAD/texture/patch/
+  COLORMAP/map builders with optional `IncludeTextures`/`IncludeColormap` flags for
+  malformed tests; existing callers default unchanged.
+- `-WallTextureTest`, `-WallTextureIntegrationTest`, `-WallTextureIwadTest`
+  PowerShell targets; `--wall-texture-test`, `--wall-texture-integration-test`,
+  `--wall-texture-iwad-test` Bash targets appended after all existing M3-05 suites,
+  preserving prior selectors. `-IwadPath`/`IWAD_PATH` adds TI04 read-only.
+- README/PORTING_NOTES/DEVELOPMENT_PLAN/CHANGELOG document M3-06 C correspondence,
+  mapping/mask/short-height/masked-deferral/lighting limits, cache lifetime/reopen,
+  actual tests/hashes/counters and Windows PASS/Linux NOT RUN.
+
 ### Verified
 
 - Windows x64, PureBasic 6.41: fixed math suite 43 cases / 318 assertions / 0
@@ -375,6 +459,61 @@ later steps.
 - No per-column heap growth or crash was observed; per-frame allocation count
   stayed 3; explicit failure paths preserved target bytes in unit/integration
   probes; no temporary DBG instrumentation remained in production/test sources.
+
+- M3-06, Windows x64 PureBasic 6.41: WT01-WT60 **60 cases / 545 assertions / 0
+  failures**; synthetic TI01-TI03 **3 cases / 116 assertions / 0 failures**;
+  optional owner-IWAD TI04 **1 case / 128 assertions / 0 failures**. Owner Ultimate
+  Doom 1.9ud `DOOM.WAD` (12,408,292 bytes, MD5
+  `c4fe9fd920207691a9f493668e0a2083`) stayed unchanged before/after read-only runs.
+- Independent generator `gen_wall_texture_golden.py` double run produced identical
+  SHA256 `5A8B9E76622BB828DD42EF1E789FB315E6AF1D4D1560FE9877C85D3137445CE3`
+  and matched the tracked fixture byte-for-byte. Synthetic full-pipeline frames
+  match the fixture: TI01 hash `119A71B79384D465`, TI02 `F05D55B8FE8C07EB`;
+  independent M3-04 span fingerprints TI01 `3EE9969A4FF10052`, TI02
+  `2FAA660491199243` are asserted unchanged by the integration harness.
+- Owner stable textured full-plane hashes (repeated byte-identical, independent
+  full-plane re-FNV, frozen M3-04/M3-05 preconditions preserved): E1M1
+  `183BA53FCECECBC8`, E1M2 `835A0339A38B190E`, E4M1 `03B5C8CFA517FC7E`. These
+  remain printed **NOT LOCKED** pending independent C-equivalent sampling; GUI
+  visual and repeat evidence are not sufficient for locking by themselves.
+- M3-06 owner counters: E1M1 spans 35 / columns 1,080 / middle/upper/lower
+  9,234/2,071/1,063 / masked middles 0 / short textures 2 / bounded short-row
+  fallbacks 1,932 / uncovered 0 / allocations 21 / nonzero bytes 12,275; E1M2
+  54/1,422, 12,311/400/1,647, masked 0, short 1, fallbacks 218, uncovered 0,
+  allocations 29, nonzero 14,305; E4M1 69/836, 26,349/2,047/253, masked 0, short 0,
+  fallbacks 0, uncovered 0, allocations 15, nonzero 27,987. All three report
+  OutOfFrameColumns=0.
+- Legacy preservation on the rebuilt main executable: `--show-walls` E1M1
+  `4A923E4D357C7BD1`, E1M2 `0C9627E5C2FD8D35`, E4M1 `9AEB8BDD16834359` (each
+  independently re-hashed by the 64,000-byte frame audit); frozen M3-04 pairs
+  E1M1 `74B485154CE29B0B`/`7ADB45DBF2611B77`, E1M2
+  `8AC0627513C4B619`/`83CAB0E1049B850A`, E4M1
+  `9FD0B15A0F33197E`/`CCAA2442EB270717` all preserved.
+- Full regression rerun actual executable/script outputs: without owner IWAD
+  **692 cases / 5,595 assertions / 0 failures**, `scripts/test.ps1` **148/148
+  checks exit 0**; with owner IWAD (M2 synthetic replaced once by 36/240, plus
+  existing I04 and TI04) **699 cases / 6,253 assertions / 0 failures**,
+  `scripts/test.ps1 -IwadPath data/DOOM.WAD` **193/193 checks exit 0**. New totals
+  were not hardcoded; old suite expectations/hashes were not weakened.
+- Actual build/CLI evidence: `pbcompiler --check` and console build exit 0;
+  each new harness syntax-check/build exit 0; `--version` `DoomPB 0.2.0` exit 0;
+  `--help` exit 0; missing `--show-textured-walls` WAD exit 1; bare mode exit 2;
+  mode conflicts exit 2 naming both wall options; legacy and textured preview
+  windows opened 960x600 via 3x nearest-neighbour and accepted WM_CLOSE exit 0.
+- GUI visual inspection (Windows, owner IWAD): textured captures for
+  E1M1/E1M2/E4M1 were reviewed; coherent textured wall bands, perspective,
+  seams/pegging and correct tier order observed, deferred black floors/sky/portal
+  interiors remained, raw-text frame hash matched harness stability, stderr empty.
+  Captures stayed ignored in `build/`; no commercial pixels were committed or
+  printed. WT60 covers converter 320→960 equality; no pixel-level raw-vs-screen
+  capture sampling was performed.
+- `scripts/build.sh`/`test.sh` add the three new selectors and TI04 branch; Git
+  Bash 5.2.37 `bash -n` actual **0/0** (syntax only). Linux x64 compiler/runtime
+  remains **NOT RUN**; Windows-only evidence reported. CPU timing was not measured.
+- No per-column/per-pixel allocation, WAD read or texture compose was observed in
+  the textured path; total allocations reconcile to pre-loop frame/plan/table/
+  clip/cache budgets. Explicit failure paths preserved target bytes. Temporary
+  `DBG` instrumentation was replaced by failure-only `diagnostic:` messages.
 
 ## [0.2.0] - 2026-11-16
 

@@ -24,6 +24,11 @@ XIncludeFile "Renderer/WallView.pbi"
 XIncludeFile "Renderer/WallProject.pbi"
 XIncludeFile "Renderer/WallDraw.pbi"
 XIncludeFile "Renderer/RenderMain.pbi"
+XIncludeFile "Renderer/WallTextureMapping.pbi"
+XIncludeFile "Renderer/WallTextureCache.pbi"
+XIncludeFile "Renderer/WallLighting.pbi"
+XIncludeFile "Renderer/TexturedWallDraw.pbi"
+XIncludeFile "Renderer/TexturedRenderMain.pbi"
 XIncludeFile "WAD/WAD.pbi"
 XIncludeFile "Graphics/Palette.pbi"
 XIncludeFile "Graphics/Patch.pbi"
@@ -53,6 +58,7 @@ Procedure PrintHelp()
   PrintN("  " + #DoomPB_Name + " --iwad <path> --show-title")
   PrintN("  " + #DoomPB_Name + " --iwad <path> --map-info <ExMy>")
   PrintN("  " + #DoomPB_Name + " --iwad <path> --show-walls <ExMy>")
+  PrintN("  " + #DoomPB_Name + " --iwad <path> --show-textured-walls <ExMy>")
   PrintN("")
   PrintN("Options:")
   PrintN("  -h, --help       Show this help and exit")
@@ -68,11 +74,16 @@ Procedure PrintHelp()
   PrintN("      --show-walls <ExMy>")
   PrintN("                     Render a real M3-05 wall-only 320x200 debug-color frame")
   PrintN("                     from the player-one start at 3x (requires --iwad)")
+  PrintN("      --show-textured-walls <ExMy>")
+  PrintN("                     Render a real M3-06 textured/COLORMAP-lit wall-only")
+  PrintN("                     320x200 frame from the player-one start at 3x")
+  PrintN("                     (requires --iwad)")
   PrintN("")
   PrintN("Without options " + #DoomPB_Name + " prints its bootstrap status and exits.")
-  PrintN("WAD metadata, named lookup, TITLEPIC presentation and M3-05 wall-only")
-  PrintN("debug rendering are available; wall frame pixels are solid debug colors, not")
-  PrintN("textured Doom graphics.")
+  PrintN("WAD metadata, named lookup, TITLEPIC presentation, M3-05 wall-only")
+  PrintN("debug colors and M3-06 textured/COLORMAP-lit wall columns are available.")
+  PrintN("Textured previews remain wall-only: floors, ceilings, sky, sprites and masked")
+  PrintN("two-sided midtextures are not rendered yet.")
   PrintN("Payload bytes are exposed only through the WAD API, not through this CLI.")
   PrintN("Gameplay is not implemented yet.")
   PrintN("No game data is read unless --iwad is supplied.")
@@ -81,11 +92,11 @@ EndProcedure
 Procedure PrintBootstrapStatus()
   PrintN(#DoomPB_Name + " " + #DoomPB_Version)
   PrintN("Status: bootstrap build. WAD parsing, lump lookup, PLAYPAL/patch")
-  PrintN("decoding, a windowed TITLEPIC mode and an M3-05 wall-only debug frame")
-  PrintN("mode are available.")
+  PrintN("decoding, a windowed TITLEPIC mode, an M3-05 wall-only debug-color frame and")
+  PrintN("an M3-06 textured/COLORMAP-lit wall-only frame mode are available.")
   PrintN("Gameplay is not implemented yet.")
   PrintN("Use '--iwad <path> --dump-info', '--lump-info <name>', '--show-title',")
-  PrintN("'--map-info <ExMy>' or '--show-walls <ExMy>'.")
+  PrintN("'--map-info <ExMy>', '--show-walls <ExMy>' or '--show-textured-walls <ExMy>'.")
   PrintN("A legally obtained DOOM.WAD is required for game data, never for this build itself.")
 EndProcedure
 
@@ -562,6 +573,334 @@ Procedure.i ShowWalls(Path.s, MapName.s)
   ProcedureReturn exitCode
 EndProcedure
 
+; Opt-in M3-06 textured wall-only preview: the same existing M2 resource/map and
+; M3-04/M3-05 startup pipeline, plus decoded >=32-table COLORMAP and the new
+; unique composed texture cache, exact r_segs/r_draw column sampling, vanilla
+; scalelight[16][48] selection and a transactional 320x200 palette-index frame.
+; Two-sided masked middles are detected/deferred and never painted opaque.
+; Prints metadata/counters/FNV only, never WAD bytes, texture pixels, coordinates
+; or screenshots. No fallback camera.
+Procedure.i ShowTexturedWalls(Path.s, MapName.s)
+  Protected canonical.s = MapCanonicalName(MapName)
+  Protected wadOpened.i = #False
+  Protected palIndex.i
+  Protected palSize.q
+  Protected pnamesSize.q
+  Protected texture1Size.q
+  Protected texture2Size.q = 0
+  Protected colormapSize.q
+  Protected *palBytes.Byte = 0
+  Protected *pnamesBytes.Byte = 0
+  Protected *texture1Bytes.Byte = 0
+  Protected *texture2Bytes.Byte = 0
+  Protected *colormapBytes.Byte = 0
+  Protected hasTexture2.i = #False
+  Protected palette.PaletteSet
+  Protected pnames.PNamesTable
+  Protected textures.TextureCatalog
+  Protected flats.FlatCatalog
+  Protected level.MapLevel
+  Protected projection.Projection
+  Protected view.WallView
+  Protected visibility.WallVisibilityResult
+  Protected colormap.ColormapSet
+  Protected target.FrameBuffer
+  Protected renderResult.TexturedWallRenderResult
+  Protected thingIndex.l = 0
+  Protected subsectorIndex.l = 0
+  Protected sectorIndex.l = 0
+  Protected spanCount.l = 0
+  Protected segmentCount.l = 0
+  Protected texturePlanCount.l = 0
+  Protected processedColumns.l = 0
+  Protected textureColumnsComputed.l = 0
+  Protected drawnPixels.l = 0
+  Protected middlePixels.l = 0
+  Protected upperPixels.l = 0
+  Protected lowerPixels.l = 0
+  Protected middleRanges.l = 0
+  Protected upperRanges.l = 0
+  Protected lowerRanges.l = 0
+  Protected drawRanges.l = 0
+  Protected emptyColumns.l = 0
+  Protected clippedColumns.l = 0
+  Protected outOfFrameColumns.l = 0
+  Protected textureSamples.l = 0
+  Protected uncoveredTexels.l = 0
+  Protected shortHeightFallbacks.l = 0
+  Protected nonzeroBytes.l = 0
+  Protected zeroBytes.l = 0
+  Protected composedTextures.l = 0
+  Protected requestedReferences.l = 0
+  Protected reusedReferences.l = 0
+  Protected maskedMidSpans.l = 0
+  Protected shortTextures.l = 0
+  Protected cacheAllocations.l = 0
+  Protected allocations.l = 0
+  Protected cacheTempBytes.q = 0
+  Protected cachePlaneBytes.q = 0
+  Protected cachePeakBytes.q = 0
+  Protected hash.q = 0
+  Protected flatCount.l = 0
+  Protected textureCount.l = 0
+  Protected pnamesCount.l = 0
+  Protected paletteCount.l = 0
+  Protected colormapCount.l = 0
+  Protected windowTitle.s = ""
+  Protected errorText.s = ""
+  Protected exitCode.i = #DoomPB_ExitFailure
+
+  If WADOpen(Path) = #False
+    PrintN(#DoomPB_Name + ": " + WADLastError())
+    ProcedureReturn #DoomPB_ExitFailure
+  EndIf
+  wadOpened = #True
+
+  palIndex = WADFindLump("PLAYPAL")
+  If palIndex < 0
+    errorText = "PLAYPAL not found: " + WADLastError()
+  Else
+    palSize = WADLumpSize(palIndex)
+    If palSize <= 0
+      errorText = "PLAYPAL is empty."
+    Else
+      *palBytes = AllocateMemory(palSize)
+      If *palBytes = 0
+        errorText = "Out of memory reading PLAYPAL."
+      ElseIf WADReadLump(palIndex, *palBytes, palSize) = #False
+        errorText = "Cannot read PLAYPAL: " + WADLastError()
+      ElseIf PaletteDecode(*palBytes, palSize, @palette) = #False
+        errorText = "Cannot decode PLAYPAL: " + PaletteLastError()
+      EndIf
+      If *palBytes <> 0
+        FreeMemory(*palBytes)
+        *palBytes = 0
+      EndIf
+      If errorText = ""
+        paletteCount = PaletteCount(@palette)
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    *pnamesBytes = ShowWallsReadLumpBuffer("PNAMES", @pnamesSize)
+    If *pnamesBytes = 0
+      errorText = "PNAMES is missing, empty or unreadable."
+    ElseIf PNamesDecode(*pnamesBytes, pnamesSize, @pnames) = #False
+      errorText = "Cannot decode PNAMES: " + PNamesLastError()
+    EndIf
+    If *pnamesBytes <> 0
+      FreeMemory(*pnamesBytes)
+      *pnamesBytes = 0
+    EndIf
+    If errorText = ""
+      pnamesCount = PNamesCount(@pnames)
+      If pnamesCount <= 0
+        errorText = "PNAMES has no patch names."
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    *texture1Bytes = ShowWallsReadLumpBuffer("TEXTURE1", @texture1Size)
+    If *texture1Bytes = 0
+      errorText = "TEXTURE1 is missing, empty or unreadable."
+    Else
+      hasTexture2 = Bool(WADFindLump("TEXTURE2") >= 0)
+      If hasTexture2
+        *texture2Bytes = ShowWallsReadLumpBuffer("TEXTURE2", @texture2Size)
+        If *texture2Bytes = 0
+          errorText = "TEXTURE2 exists but is empty or unreadable."
+        EndIf
+      EndIf
+    EndIf
+  EndIf
+  If errorText = ""
+    If TextureCatalogDecode(*texture1Bytes, texture1Size, *texture2Bytes,
+                            texture2Size, hasTexture2, @textures) = #False
+      errorText = "Cannot decode TEXTURE1/TEXTURE2: " + TextureDefsLastError()
+    EndIf
+  EndIf
+  If *texture1Bytes <> 0
+    FreeMemory(*texture1Bytes)
+    *texture1Bytes = 0
+  EndIf
+  If *texture2Bytes <> 0
+    FreeMemory(*texture2Bytes)
+    *texture2Bytes = 0
+  EndIf
+
+  If errorText = ""
+    If TextureCatalogResolve(@textures, @pnames) = #False
+      errorText = "Cannot resolve texture patch names against the WAD: " + TextureDefsLastError()
+    Else
+      textureCount = TextureCatalogCount(@textures)
+      If textureCount <= 0
+        errorText = "TEXTURE1/TEXTURE2 define no textures."
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    *colormapBytes = ShowWallsReadLumpBuffer("COLORMAP", @colormapSize)
+    If *colormapBytes = 0
+      errorText = "COLORMAP is missing, empty or unreadable."
+    ElseIf ColormapDecode(*colormapBytes, colormapSize, @colormap) = #False
+      errorText = "Cannot decode COLORMAP: " + ColormapLastError()
+    EndIf
+    If *colormapBytes <> 0
+      FreeMemory(*colormapBytes)
+      *colormapBytes = 0
+    EndIf
+    If errorText = ""
+      colormapCount = ColormapCount(@colormap)
+      If colormapCount < #LIGHT_MapCountMin
+        errorText = "COLORMAP has fewer than " + Str(#LIGHT_MapCountMin) + " classic lighting tables."
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    If FlatCatalogBuild(@flats) = #False
+      errorText = "Cannot build the F_START/F_END flat catalog: " + FlatLastError()
+    Else
+      flatCount = FlatCatalogCount(@flats)
+      If flatCount <= 0
+        errorText = "F_START/F_END flat namespace is empty."
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    If MapLevelLoad(canonical, @level) = #False
+      errorText = "Cannot load map " + canonical + ": " + MapLevelLastError()
+    EndIf
+  EndIf
+  If errorText = ""
+    If MapLevelValidateResources(@level, @flats, @textures) = #False
+      errorText = "Map resource binding failed: " + MapLevelLastError()
+    EndIf
+  EndIf
+  If errorText = ""
+    If ProjectionInitClassic(@projection) = #False
+      errorText = "Cannot initialize the classic 320-column projection: " + ProjectionLastError()
+    EndIf
+  EndIf
+  If errorText = ""
+    If WallRenderPlayerStartView(@level, @view, @thingIndex, @subsectorIndex,
+                                 @sectorIndex) = #False
+      errorText = "Cannot derive the player-one start view: " + WallRenderLastError()
+    EndIf
+  EndIf
+  If errorText = ""
+    If WallVisibilityBuild(@level, @view\Camera, @projection, @flats,
+                           @textures, @visibility) = #False
+      errorText = "Cannot build wall visibility: " + WallVisibilityLastError()
+    ElseIf WallVisibilityCount(@visibility) <= 0
+      errorText = "Wall visibility produced zero visible spans for " + canonical + "."
+    Else
+      spanCount = WallVisibilityCount(@visibility)
+    EndIf
+  EndIf
+  If errorText = ""
+    If TexturedWallRenderFrame(@level, @view, @projection, @flats, @textures,
+                               @colormap, @visibility, @target, @renderResult,
+                               #True) = #False
+      errorText = "Cannot render the textured wall-only frame: " + TexturedWallRenderLastError()
+    ElseIf TexturedWallRenderGetStats(@renderResult, @spanCount, @segmentCount,
+                                      0, @texturePlanCount, 0, @processedColumns,
+                                      @textureColumnsComputed, @drawnPixels,
+                                      @middlePixels, @upperPixels, @lowerPixels,
+                                      @middleRanges, @upperRanges, @lowerRanges,
+                                      @drawRanges, @emptyColumns, @clippedColumns,
+                                      @outOfFrameColumns, @textureSamples,
+                                      @uncoveredTexels, @shortHeightFallbacks,
+                                      @nonzeroBytes, @zeroBytes, @composedTextures,
+                                      @requestedReferences, @reusedReferences,
+                                      @maskedMidSpans, @shortTextures,
+                                      @cacheAllocations, @allocations,
+                                      @cacheTempBytes, @cachePlaneBytes,
+                                      @cachePeakBytes, @hash) = #False
+      errorText = "Cannot read the textured frame statistics: " + TexturedWallRenderLastError()
+    ElseIf drawnPixels <= 0
+      errorText = "The textured frame contains zero wall pixels."
+    ElseIf nonzeroBytes <= 0
+      errorText = "The textured frame contains zero nonzero palette bytes."
+    EndIf
+  EndIf
+
+  If errorText = ""
+    WADClose()
+    wadOpened = #False
+  EndIf
+
+  If errorText = ""
+    PrintN(#DoomPB_Name + " " + #DoomPB_Version)
+    PrintN("Map: " + canonical)
+    PrintN("PLAYPAL colors: " + Str(paletteCount))
+    PrintN("PNAMES names: " + Str(pnamesCount) + ", textures: " + Str(textureCount) +
+           ", flats: " + Str(flatCount) + ", COLORMAP tables: " + Str(colormapCount))
+    PrintN("Player-one THING index: " + Str(thingIndex) +
+           ", subsector: " + Str(subsectorIndex) + ", floor sector: " + Str(sectorIndex))
+    PrintN("View height source: player start floor + VIEWHEIGHT 41 units (static, no bob).")
+    PrintN("Visible wall spans: " + Str(spanCount) + ", M3-05 draw plans: " +
+           Str(segmentCount) + ", textured material plans: " + Str(texturePlanCount))
+    PrintN("Columns processed: " + Str(processedColumns) +
+           ", texture columns computed: " + Str(textureColumnsComputed) +
+           ", tier draw ranges: " + Str(drawRanges))
+    PrintN("Textured wall pixels: middle " + Str(middlePixels) + ", upper " + Str(upperPixels) +
+           ", lower " + Str(lowerPixels) + ", writes total " + Str(drawnPixels))
+    PrintN("Texels sampled: " + Str(textureSamples) +
+           ", uncovered-source (mask0) texels: " + Str(uncoveredTexels) +
+           ", short-height (<128) fallback rows: " + Str(shortHeightFallbacks))
+    PrintN("Used-texture cache: composed " + Str(composedTextures) + " unique textures" +
+           " from " + Str(requestedReferences) + " painted-tier references, reused " +
+           Str(reusedReferences) + "; short (<128) composed textures " + Str(shortTextures) + ".")
+    PrintN("Two-sided masked middles detected/deferred: " + Str(maskedMidSpans) +
+           " (not painted opaque; M4 back-to-front scope).")
+    PrintN("Vertical clipping: clipped columns " + Str(clippedColumns) +
+           ", empty columns " + Str(emptyColumns) + ", out-of-frame columns " +
+           Str(outOfFrameColumns))
+    PrintN("Lighting: static vanilla scalelight 16x48 over COLORMAP map levels 0..31; extralight 0.")
+    PrintN("Frame palette bytes: zero " + Str(zeroBytes) + ", nonzero " + Str(nonzeroBytes) +
+           " (total " + Str(#TEXTRENDER_FramePixelCount) + ").")
+    PrintN("Allocations: " + Str(allocations) + " (cache caller-level " +
+           Str(cacheAllocations) + "); cache temp " + Str(cacheTempBytes) +
+           " bytes, planes " + Str(cachePlaneBytes) + ", peak " + Str(cachePeakBytes) + ".")
+    PrintN("Frame: 320x200 row-major indexed/COLORMAP-mapped palette plane, at " +
+           Str(#VIDEO_DefaultScale) + "x nearest-neighbour presentation.")
+    PrintN("Frame hash (FNV-1a64, 64000 palette bytes): " + WallFrameHashHex64(hash))
+    PrintN("Close the window to exit.")
+    windowTitle = "DoomPB - Textured Walls - " + canonical
+    If VideoShowFramebuffer(@target, @palette, #VIDEO_DefaultScale, windowTitle) = #False
+      errorText = "Cannot show the textured wall-only frame: " + VideoLastError()
+    Else
+      exitCode = #DoomPB_ExitOk
+    EndIf
+  EndIf
+
+  If errorText <> ""
+    PrintN(#DoomPB_Name + ": " + errorText)
+  EndIf
+
+  ; All owned buffers/objects released on every path; no WAD bytes retained.
+  FrameBufferReset(@target)
+  TexturedWallRenderResultReset(@renderResult)
+  WallVisibilityReset(@visibility)
+  WallViewReset(@view)
+  ProjectionReset(@projection)
+  MapLevelReset(@level)
+  FlatCatalogReset(@flats)
+  TextureCatalogReset(@textures)
+  PNamesReset(@pnames)
+  ColormapReset(@colormap)
+  PaletteReset(@palette)
+  If wadOpened
+    WADClose()
+  EndIf
+  ProcedureReturn exitCode
+EndProcedure
+
 Define argumentCount.i
 Define argument.s
 Define exitCode.i = #DoomPB_ExitOk
@@ -574,6 +913,8 @@ Define mapInfo.i = #False
 Define mapName.s = ""
 Define showWalls.i = #False
 Define wallsMapName.s = ""
+Define showTexturedWalls.i = #False
+Define texturedMapName.s = ""
 Define sawIwad.i = #False
 Define index.i
 Define parseError.s = ""
@@ -609,6 +950,9 @@ ElseIf argumentCount = 1
       exitCode = #DoomPB_ExitUsage
     Case "--show-walls"
       PrintUsageError("'--show-walls' requires '--iwad <path> <ExMy>'.")
+      exitCode = #DoomPB_ExitUsage
+    Case "--show-textured-walls"
+      PrintUsageError("'--show-textured-walls' requires '--iwad <path> <ExMy>'.")
       exitCode = #DoomPB_ExitUsage
     Default
       PrintUsageError("unknown option '" + argument + "'.")
@@ -687,6 +1031,20 @@ Else
             showWalls = #True
           EndIf
         EndIf
+      Case "--show-textured-walls"
+        If showTexturedWalls
+          parseError = "duplicate '--show-textured-walls' option."
+        ElseIf index + 1 >= argumentCount
+          parseError = "'--show-textured-walls' requires a map name."
+        Else
+          index + 1
+          texturedMapName = ProgramParameter(index)
+          If texturedMapName = ""
+            parseError = "'--show-textured-walls' requires a non-empty map name."
+          Else
+            showTexturedWalls = #True
+          EndIf
+        EndIf
       Default
         parseError = "unknown option '" + argument + "'."
     EndSelect
@@ -696,8 +1054,8 @@ Else
   If parseError <> ""
     PrintUsageError(parseError)
     exitCode = #DoomPB_ExitUsage
-  ElseIf dumpInfo + lumpInfo + showTitle + mapInfo + showWalls > 1
-    PrintUsageError("only one of '--dump-info', '--lump-info', '--show-title', '--map-info' and '--show-walls' may be used.")
+  ElseIf dumpInfo + lumpInfo + showTitle + mapInfo + showWalls + showTexturedWalls > 1
+    PrintUsageError("only one of '--dump-info', '--lump-info', '--show-title', '--map-info', '--show-walls' and '--show-textured-walls' may be used.")
     exitCode = #DoomPB_ExitUsage
   ElseIf dumpInfo And sawIwad
     exitCode = DumpWadInfo(wadPath)
@@ -709,6 +1067,8 @@ Else
     exitCode = PrintMapInfo(wadPath, mapName)
   ElseIf showWalls And sawIwad
     exitCode = ShowWalls(wadPath, wallsMapName)
+  ElseIf showTexturedWalls And sawIwad
+    exitCode = ShowTexturedWalls(wadPath, texturedMapName)
   ElseIf dumpInfo
     PrintUsageError("'--dump-info' requires '--iwad <path>'.")
     exitCode = #DoomPB_ExitUsage
@@ -724,8 +1084,11 @@ Else
   ElseIf showWalls
     PrintUsageError("'--show-walls' requires '--iwad <path> <ExMy>'.")
     exitCode = #DoomPB_ExitUsage
+  ElseIf showTexturedWalls
+    PrintUsageError("'--show-textured-walls' requires '--iwad <path> <ExMy>'.")
+    exitCode = #DoomPB_ExitUsage
   ElseIf sawIwad
-    PrintUsageError("'--iwad' requires '--dump-info', '--lump-info <name>', '--show-title', '--map-info <ExMy>' or '--show-walls <ExMy>'.")
+    PrintUsageError("'--iwad' requires '--dump-info', '--lump-info <name>', '--show-title', '--map-info <ExMy>', '--show-walls <ExMy>' or '--show-textured-walls <ExMy>'.")
     exitCode = #DoomPB_ExitUsage
   Else
     PrintUsageError("no action specified.")
