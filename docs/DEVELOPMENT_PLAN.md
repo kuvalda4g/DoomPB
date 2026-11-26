@@ -282,44 +282,62 @@ Linux x64 — **NOT RUN**. Коммит/тег `v0.2.0` создаёт влад�
       owned solidsegs-эквивалентом и реальным occlusion state (M3-04).
 - [x] Реализовать вертикальную wall projection `R_StoreWallRange`/`R_ScaleFromGlobalAngle` и отрисовку одноцветных middle/upper/lower колонок с точным clip по экрану (M3-05, Windows x64; debug palette indices 0/176/252/96). Полный vanilla `drawseg_t` records всё ещё отложен: кадр использует caller-owned `WallSpanPlan` numeric metadata.
 - [x] M3-06 textured wall-column/COLORMAP lighting: upper/lower/middle wall textures с точным `rw_offset`/width-mask texturecolumn, unsigned `dc_iscale`, pegged `dc_texturemid`, owned used-texture cache и vanilla `scalelight[16][48]` COLORMAP lighting (Windows x64). Masked two-sided middle textures detected/deferred, не рисуются opaque; masked midtexture clipping по экрану остаётся за M3-06 scope (back-to-front drawseg/sprite-style M4).
-- [ ] Сравнивать результирующие textured frame hashes / изображения с эталонной сборкой при одинаковых позициях камеры (M3-06 synthetic TI01/TI02 full frames/samples/plans/hashes сверены с независимым Python oracle; owner E1M1/E1M2/E4M1 stable textured hashes визуально/repeat подтверждены, но не закреплены как frozen goldens, поскольку независимое C-equivalent sampling и эталонная textured C сборка недоступны).
-- [ ] Замерять время CPU на кадр и отсутствие лишних аллокаций внутри горячего цикла (M3-05 требует 3 checked allocations/frame; M3-06 observes allocations до per-column loop, но CPU timing не измерен).
+- [ ] Сравнивать результирующие textured frame hashes / изображения с эталонной сборкой при одинаковых позициях камеры (M3-06 synthetic TI01/TI02 full frames/samples/plans/hashes сверены с независимым Python oracle и остались неизменными в M3-07; owner RI04 independent raw-PATCH composition сравнил 6/6/4 bounded textures для E1M1/E1M2/E4M1 с 0 pixel/mask/opaque/width-mask mismatch, raw owner `COLORMAP` exhaustively identical, bounded first-span column/row sample matched для E1M2/E4M1, а E1M1 frame-pixel oracle — `NOT RUN` reason 3; owner hashes `183BA53FCECECBC8`/`835A0339A38B190E`/`03B5C8CFA517FC7E` остаются **NOT LOCKED**; полное same-camera original-C wall-only image comparison — **REFERENCE UNAVAILABLE**).
+- [x] Замерять время CPU на кадр и отсутствие лишних аллокаций внутри горячего цикла (M3-07 BEN01, Windows PB 6.41 x64 verified kernel32 QPC 10 MHz/1 мкс: cold end-to-end 2 warmup + 11 measured, warm textured 20 + 100, warm debug 10 + 100; независимые от хоста min/median/p95/mean µs фактически печатаются, это wall-only synthetic preview, не FPS claim; allocations pre-column 13 = cache 8 + five frame resources; draw path source audit 0 `AllocateMemory(`/`TextureCompose(`/`WADReadLump(`)).
 
 **Критерий готовности:** из фиксированной камеры в E1M1 видны **правильно расположенные и текстурированные стены** без заметных геометрических артефактов; можно воспроизвести один и тот же кадр.
 
-**Статус (26 ноября 2026):** M3 не завершён. M3-01 fixed-point, M3-02 BAM
-углы/точные trig-tables/geometry primitives, M3-03 детерминированный обход BSP
-дерева из fixed camera с owned `SUBSECTOR`/`SEG` trace, M3-04 точная 320-column
-проекция, headless solid/pass interval clipping, source-faithful `R_AddLine`
-SOLID/PASS screen spans, полный `R_CheckBBox` и online near-first occlusion walk, и
-M3-05 checked `WallView` (fixed camera + static signed 16.16 viewz), точная
-вертикальная `R_StoreWallRange`/`R_ScaleFromGlobalAngle` projection, 12-bit
-interpolation plans, transactional 320x200 wall-only кадр и отрисовка одноцветных
-middle/upper/lower tiers реализованы и протестированы на Windows x64 (PB 6.41)
-в рабочем дереве. M3-04 публикует owned числовые экранные интервалы/счётчики;
-M3-05 рисует **debug palette indices** (0/176/252/96), поддерживает M3-04 order/
-occlusion и выдаёт canonical FNV-1a64 кадра. M3-06 добавляет **textured wall
-columns** для тех же tiers через existing `TextureCatalog`/`TextureCompose`/
-`Colormap`/`FrameBuffer`: exact `rw_offset`/`rw_centerangle` texturecolumn, vanilla
-width mask, unsigned `dc_iscale`, pegged middle/upper/lower `dc_texturemid`, owned
-used-texture cache и static 320-column `scalelight[16][48]` COLORMAP lighting;
-`<128` height rows bounded/documented/fallback-counted, uncovered mask0 routed
-through composed index-0/mask-0 policy and counted, masked two-sided middle
-textures detected/deferred (never opaque), floors/ceilings/sky/sprites/masked
-back-to-front overlays deferred to M4+. Actual Windows tests: WT01–WT60 **60/545/0**,
-TI01–TI03 **3/116/0**, optional owner TI04 **1/128/0**; synthetic full-pipeline
-TI01/TI02 frames equal independent fixture hashes `119A71B79384D465`/
+**Статус (27 ноября 2026):** M3-07 завершил Windows x64 интеграцию M3-01…M3-06
+как явно ограниченный **wall-only textured preview** release scope; версия
+`0.3.0` подготовлена после обязательных gates, но owner commit/tag ещё pending,
+и полный M3 не объявляется завершённым: эталонная C-сравнение кадров остаётся
+официально незакрытым. M3-01 fixed-point, M3-02 BAM углы/точные trig-tables/
+geometry primitives, M3-03 детерминированный обход BSP дерева из fixed camera с
+owned `SUBSECTOR`/`SEG` trace, M3-04 точная 320-column проекция, headless solid/
+pass interval clipping, source-faithful `R_AddLine` SOLID/PASS screen spans, полный
+`R_CheckBBox` и online near-first occlusion walk, M3-05 checked `WallView` и
+`R_StoreWallRange`/`R_ScaleFromGlobalAngle` projection/12-bit plans/debug tiers, и
+M3-06 exact `rw_offset`/`rw_centerangle` texturecolumn/vanilla width mask/unsigned
+`dc_iscale`/pegged `dc_texturemid`/owned used-texture cache/static
+`scalelight[16][48]` `COLORMAP` lighting сохранены на Windows x64 PB 6.41.
+M3-04 публикует owned числовые экранные интервалы/счётчики; M3-05 рисует debug
+palette indices 0/176/252/96 и canonical FNV-1a64; M3-06 рисует те же
+middle/upper/lower tiers textured/COLORMAP-lit. `<128` height rows bounded/
+documented/fallback-counted, uncovered mask0 routed through composed index-0/
+mask-0 policy/counted, masked two-sided middles detected/deferred (never opaque).
+Floors/ceilings/sky/sprites/masked back-to-front overlays остаются M4+.
+Actual M3-07 tests на owner Windows: synthetic MR01–MR36 + RI01–RI03
+**39/444/0, exit 0**; optional owner RI04 E1M1/E1M2/E4M1 **1/149/0, exit 0**
+(no path: **0/0, NOT RUN**); BEN01 **1/67/0, exit 0** (QPC 10 MHz/1 мкс; cold
+2+11, warm textured 20+100, warm debug 10+100; observed per-frame min/median/
+p95/mean мкс representative post-bump runs cold `7910/8136/8297/8126` и
+`8461/8528/8682/8547`, warm textured `5899/6103/6287/6168` и
+`6422/6628/6758/6634`, warm debug `369/390/399/389` и `370/389/405/390` on the
+observed host, varying per run; wall-only metric, not FPS; allocations 13 =
+cache8+5, composed 3 unique; hot
+draw path has zero allocation/compose/WAD-read tokens). Existing WT01–WT60/
+TI01–TI03/TI04, M2 owner mode 36/240 and old M1/M2/M3 regressions remained green.
+Synthetic full-pipeline TI01/TI02 fixtures `119A71B79384D465`/
 `F05D55B8FE8C07EB` и M3-04 span fingerprints `3EE9969A4FF10052`/
 `2FAA660491199243` unchanged; legacy M3-05 debug hashes `4A923E4D357C7BD1`/
 `0C9627E5C2FD8D35`/`9AEB8BDD16834359` and M3-04 fingerprint pairs preserved.
-Owner E1M1/E1M2/E4M1 stable textured hashes `183BA53FCECECBC8`/
-`835A0339A38B190E`/`03B5C8CFA517FC7E` repeat byte-identical and were visually
-reviewed at 960×600, но **not frozen** pending independent C-equivalent sampling.
-`drawseg_t`, masked back-to-front drawing, planes/sky/sprites and full world
-renderer остаются M3/M4+. Aggregate actual Windows scripts: no-owner **692/5,595/0**
-and `scripts/test.ps1` 148/148; owner path **699/6,253/0** and 193/193 (actual).
-Версия остаётся `0.2.0`; `v0.3.0` не подготовлен; Linux x64 — **NOT RUN**; CPU
-timing не измерен.
+Owner textured hashes `183BA53FCECECBC8`/`835A0339A38B190E`/`03B5C8CFA517FC7E`
+repeat and pass independent full-plane re-FNV, raw compose/COLORMAP/bounded sample
+evidence, но остаются **NOT LOCKED**; полное same-camera C wall-only image
+comparison недоступно (E1M1 bounded frame-pixel oracle `NOT RUN` reason 3).
+Windows GUI TITLEPIC/debug/textured для E1M1/E1M2/E4M1 открыты/закрыты в exact
+960×600 client, nonblank captures, normal `WM_CLOSE`, exit 0; captures ignored,
+raw-vs-3x layers различаются. Post-bump full regression после version/script/doc
+edits: owner `scripts/test.ps1` **239/239 checks exit 0**; synthetic-only
+**175/175 checks exit 0**. Executable-level aggregate actual: synthetic **732
+cases / 6,106 assertions / 0 failures**; owner mode **740 / 6,913 / 0** (M2 owner
+36/240 заменяет synthetic 35/221; optional harnesses counted only when executed,
+без double count). Linux x64 **NOT RUN**: Windows `bash.exe` is a WSL stub
+failing `/bin/bash`, but actual Git Bash `5.2.37(1)-release (x86_64-pc-msys)`
+`bash -n scripts/build.sh` и `test.sh` exit 0 (синтаксис only); Linux PB 6.41
+build/runtime genuinely не выполнялся.
+Owner IWAD unchanged 12,408,292 bytes/MD5
+`c4fe9fd920207691a9f493668e0a2083`. Owner commit/tag pending.
 
 ### M4 — Полный программный рендерер (`v0.4.0`)
 

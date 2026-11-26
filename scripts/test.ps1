@@ -18,13 +18,15 @@
     unit suite WP01-WP56, its synthetic WAD/level/camera/frame integration
     WI01-WI03 and optional real-IWAD wall-render WI04, M3-06 textured wall-column/
     vanilla-lighting unit suite WT01-WT60, its synthetic texture/COLORMAP
-    integration TI01-TI03 and optional real-IWAD textured TI04, and smoke tests
-    against the produced executable: --version, --help, no-argument startup,
-    unknown-option handling, --lump-info argument validation and nonblocking
-    --show-title failures. No commercial game data and no display are needed for
-    the synthetic suite. When -IwadPath supplies an owner-owned legal IWAD,
-    optional M3-03 I04, M3-04 I04, M3-05 WI04, M3-06 TI04 and --map-info CLI
-    checks additionally run read-only on the same file.
+    integration TI01-TI03 and optional real-IWAD textured TI04, M3-07 synthetic
+    release integration MR01-MR36 and RI01-RI03, optional real-IWAD release RI04,
+    BEN01 wall-only frame timing, and smoke tests against the produced
+    executable: --version, --help, no-argument startup, unknown-option handling,
+    --lump-info argument validation and nonblocking --show-title failures. No
+    commercial game data and no display are needed for the synthetic suite. When
+    -IwadPath supplies an owner-owned legal IWAD, optional M3-03 I04, M3-04 I04,
+    M3-05 WI04, M3-06 TI04, M3-07 RI04 and --map-info CLI checks additionally run
+    read-only on the same file.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -33,8 +35,9 @@
 
 .PARAMETER IwadPath
     Optional owner-provided legal IWAD path. It is never printed into committed
-    files or logs. Without it, optional M3-03 I04, M3-04 I04 and M3-05 WI04 are
-    reported NOT RUN and no commercial game data is read.
+    files or logs. Without it, optional M3-03 I04, M3-04 I04, M3-05 WI04,
+    M3-06 TI04 and M3-07 RI04 are reported NOT RUN and no commercial game data is
+    read.
 
 .EXAMPLE
     ./scripts/test.ps1
@@ -79,6 +82,9 @@ $wallRenderIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3WallRenderIwadTests
 $wallTextureTestExe = Join-Path $repoRoot 'build\DoomPB-WallTextureTests.exe'
 $wallTextureIntegrationTestExe = Join-Path $repoRoot 'build\DoomPB-M3WallTextureTests.exe'
 $wallTextureIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3WallTextureIwadTests.exe'
+$m3ReleaseTestExe = Join-Path $repoRoot 'build\DoomPB-M3ReleaseTests.exe'
+$m3ReleaseIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3ReleaseIwadTests.exe'
+$m3ReleaseBenchmarkExe = Join-Path $repoRoot 'build\DoomPB-M3ReleaseBenchmark.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -98,11 +104,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest, [switch]$GeometryTest, [switch]$GeometryIntegrationTest, [switch]$GeometryIwadTest, [switch]$BspTest, [switch]$BspIntegrationTest, [switch]$BspIwadTest, [switch]$WallClippingTest, [switch]$WallClippingIntegrationTest, [switch]$WallClippingIwadTest, [switch]$WallProjectionTest, [switch]$WallRenderIntegrationTest, [switch]$WallRenderIwadTest, [switch]$WallTextureTest, [switch]$WallTextureIntegrationTest, [switch]$WallTextureIwadTest)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest, [switch]$GeometryTest, [switch]$GeometryIntegrationTest, [switch]$GeometryIwadTest, [switch]$BspTest, [switch]$BspIntegrationTest, [switch]$BspIwadTest, [switch]$WallClippingTest, [switch]$WallClippingIntegrationTest, [switch]$WallClippingIwadTest, [switch]$WallProjectionTest, [switch]$WallRenderIntegrationTest, [switch]$WallRenderIwadTest, [switch]$WallTextureTest, [switch]$WallTextureIntegrationTest, [switch]$WallTextureIwadTest, [switch]$M3ReleaseTest, [switch]$M3ReleaseIwadTest, [switch]$M3ReleaseBenchmark)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest -M3ReleaseTest:$M3ReleaseTest -M3ReleaseIwadTest:$M3ReleaseIwadTest -M3ReleaseBenchmark:$M3ReleaseBenchmark
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest -M3ReleaseTest:$M3ReleaseTest -M3ReleaseIwadTest:$M3ReleaseIwadTest -M3ReleaseBenchmark:$M3ReleaseBenchmark -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -729,11 +735,109 @@ if ([string]::IsNullOrWhiteSpace($IwadPath)) {
 }
 
 Write-Host ''
+Write-Host '== M3-07 synthetic release integration test build =='
+$status = Invoke-BuildStep -Check -M3ReleaseTest
+Test-Condition ($status -eq 0) "M3-07 synthetic release test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -M3ReleaseTest
+Test-Condition ($status -eq 0) "M3-07 synthetic release test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $m3ReleaseTestExe -PathType Leaf) "M3-07 synthetic release test output exists: $m3ReleaseTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $m3ReleaseTestExe -PathType Leaf)) {
+    Write-Host 'Aborting: M3-07 synthetic release test build failed.' -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-07 synthetic release integration tests (MR01-MR36, RI01-RI03) =='
+$m3ReleaseOutput = & $m3ReleaseTestExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M3-07 release integration tests exit with 0 (got $status)"
+Test-Condition ($m3ReleaseOutput -match '(?m)^RESULT: PASS') "M3-07 synthetic release integration reports PASS"
+Test-Condition ($m3ReleaseOutput -match 'Cases: 39, assertions: 444, failures: 0') "M3-07 runs 39 cases/444 assertions/0 failures"
+Test-Condition ($m3ReleaseOutput -match '\[MR36\]') "M3-07 synthetic suite actually executed MR36"
+Test-Condition ($m3ReleaseOutput -match '\[RI01\]') "M3-07 synthetic suite actually executed RI01"
+Test-Condition ($m3ReleaseOutput -match '\[RI03\]') "M3-07 synthetic suite actually executed RI03"
+
+Write-Host ''
+Write-Host '== M3-07 optional IWAD release integration test build =='
+$status = Invoke-BuildStep -Check -M3ReleaseIwadTest
+Test-Condition ($status -eq 0) "M3-07 optional IWAD release test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -M3ReleaseIwadTest
+Test-Condition ($status -eq 0) "M3-07 optional IWAD release test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $m3ReleaseIwadTestExe -PathType Leaf) "M3-07 optional IWAD release test output exists: $m3ReleaseIwadTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $m3ReleaseIwadTestExe -PathType Leaf)) {
+    Write-Host 'Aborting: M3-07 optional IWAD release test build failed.' -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-07 optional IWAD release integration tests (RI04) =='
+if ([string]::IsNullOrWhiteSpace($IwadPath)) {
+    $m3ReleaseIwadOutput = & $m3ReleaseIwadTestExe 2>&1 | Out-String
+    $status = $LASTEXITCODE
+    Test-Condition ($status -eq 0) "optional M3-07 RI04 tests exit with 0 without a path (got $status)"
+    Test-Condition ($m3ReleaseIwadOutput -match 'NOT RUN') "optional M3-07 RI04 tests report NOT RUN without a path"
+    Test-Condition ($m3ReleaseIwadOutput -match 'Cases: 0, assertions: 0, failures: 0') "optional M3-07 RI04 no-argument mode is clean"
+} else {
+    Test-Condition (Test-Path -LiteralPath $IwadPath -PathType Leaf) "explicit owner IWAD path exists for M3-07"
+    if (Test-Path -LiteralPath $IwadPath -PathType Leaf) {
+        $m3ReleaseIwadOutput = & $m3ReleaseIwadTestExe $IwadPath 2>&1 | Out-String
+        $status = $LASTEXITCODE
+        Test-Condition ($status -eq 0) "optional M3-07 RI04 E1M1/E1M2/E4M1 integration exits with 0 (got $status)"
+        Test-Condition ($m3ReleaseIwadOutput -match '(?m)^RESULT: PASS') "optional M3-07 RI04 reports PASS"
+        Test-Condition ($m3ReleaseIwadOutput -match 'Cases: 1, assertions: 149, failures: 0') "M3-07 RI04 runs 1 case/149 assertions/0 failures"
+        Test-Condition ($m3ReleaseIwadOutput -match 'known Ultimate Doom 1.9ud local identity 12408292 bytes/MD5 observed') "M3-07 RI04 observed the known owner IWAD identity"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M1.*transactional textured frame') "optional M3-07 actually rendered E1M1 textured frame"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M2.*transactional textured frame') "optional M3-07 actually rendered E1M2 textured frame"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E4M1.*transactional textured frame') "optional M3-07 actually rendered E4M1 textured frame"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M1 observed textured hash \(NOT LOCKED\): 183BA53FCECECBC8') "M3-07 E1M1 observed textured hash remains 183BA53FCECECBC8"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M2 observed textured hash \(NOT LOCKED\): 835A0339A38B190E') "M3-07 E1M2 observed textured hash remains 835A0339A38B190E"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E4M1 observed textured hash \(NOT LOCKED\): 03B5C8CFA517FC7E') "M3-07 E4M1 observed textured hash remains 03B5C8CFA517FC7E"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M1 independent raw-PATCH composition equals production for 6 bounded textures \(0 pixel/mask/mask-width mismatch\)') "M3-07 E1M1 independent raw composition sampled six textures with zero mismatch"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M2 independent raw-PATCH composition equals production for 6 bounded textures \(0 pixel/mask/mask-width mismatch\)') "M3-07 E1M2 independent raw composition sampled six textures with zero mismatch"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E4M1 independent raw-PATCH composition equals production for 4 bounded textures \(0 pixel/mask/mask-width mismatch\)') "M3-07 E4M1 independent raw composition sampled four textures with zero mismatch"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M1 independent raw COLORMAP mismatches: tables 0, texels 0') "M3-07 E1M1 raw COLORMAP is exhaustively identical"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M2 independent raw COLORMAP mismatches: tables 0, texels 0') "M3-07 E1M2 raw COLORMAP is exhaustively identical"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E4M1 independent raw COLORMAP mismatches: tables 0, texels 0') "M3-07 E4M1 raw COLORMAP is exhaustively identical"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M1 frame-pixel independent sample NOT RUN: no safe first-span one-sided middle \(reason 3\)') "M3-07 E1M1 bounded frame-pixel oracle honestly NOT RUN with reason 3"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E1M2 independent first-span middle pixel samples matched 1, mismatches 0') "M3-07 E1M2 bounded first-span pixel equals target"
+        Test-Condition ($m3ReleaseIwadOutput -match 'E4M1 independent first-span middle pixel samples matched 1, mismatches 0') "M3-07 E4M1 bounded first-span pixel equals target"
+        Test-Condition ($m3ReleaseIwadOutput -match 'residual reference gap: whole clipped-span chronology') "M3-07 RI04 reports the residual full-C-frame comparison gap"
+        Test-Condition ($m3ReleaseIwadOutput -match 'owner IWAD remains unchanged') "optional M3-07 owner IWAD read-only size/MD5 unchanged"
+    }
+}
+
+Write-Host ''
+Write-Host '== M3-07 wall-only frame benchmark build =='
+$status = Invoke-BuildStep -Check -M3ReleaseBenchmark
+Test-Condition ($status -eq 0) "M3-07 frame benchmark syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -M3ReleaseBenchmark
+Test-Condition ($status -eq 0) "M3-07 frame benchmark build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $m3ReleaseBenchmarkExe -PathType Leaf) "M3-07 frame benchmark output exists: $m3ReleaseBenchmarkExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $m3ReleaseBenchmarkExe -PathType Leaf)) {
+    Write-Host 'Aborting: M3-07 frame benchmark build failed.' -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M3-07 wall-only frame benchmark (BEN01) =='
+$m3ReleaseBenchmarkOutput = & $m3ReleaseBenchmarkExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "M3-07 BEN01 frame benchmark exits with 0 (got $status)"
+Test-Condition ($m3ReleaseBenchmarkOutput -match '(?m)^RESULT: PASS') "M3-07 BEN01 reports PASS"
+Test-Condition ($m3ReleaseBenchmarkOutput -match 'Cases: 1, assertions: 67, failures: 0') "M3-07 BEN01 runs 1 case/67 assertions/0 failures"
+Test-Condition ($m3ReleaseBenchmarkOutput -match 'clock frequency 10000000 ticks/s, resolution 1 us') "M3-07 BEN01 uses verified Windows QPC 10 MHz/1 us clock"
+Test-Condition ($m3ReleaseBenchmarkOutput -match 'cold end-to-end wall preview: cycles 2 warmup \+ 11 measured') "M3-07 BEN01 recorded the cold end-to-end cycle counts"
+Test-Condition ($m3ReleaseBenchmarkOutput -match 'warm textured frame-only: cycles 20 warmup \+ 100 measured') "M3-07 BEN01 recorded the warm textured cycle counts"
+Test-Condition ($m3ReleaseBenchmarkOutput -match 'warm debug-colour frame-only: cycles 10 warmup \+ 100 measured') "M3-07 BEN01 recorded the warm debug cycle counts"
+Test-Condition ($m3ReleaseBenchmarkOutput -match 'allocations: warm total 13 observed fixture budget 13; compose 3 unique') "M3-07 BEN01 observed fixed pre-column allocation/composition counters"
+Test-Condition ($m3ReleaseBenchmarkOutput -match 'No WADReadLump/AllocateMemory/TextureCompose appears in the per-column') "M3-07 BEN01 reports the static per-column draw-path audit"
+
+Write-Host ''
 Write-Host '== Smoke tests =='
 
 $result = Invoke-DoomPB -Arguments @('--version')
 Test-Condition ($result.ExitCode -eq 0) "--version exits with 0 (got $($result.ExitCode))"
-Test-Condition ($result.Output -match '(?m)^DoomPB 0\.2\.0\s*$') "--version prints 'DoomPB 0.2.0' (got: $($result.Output.Trim()))"
+Test-Condition ($result.Output -match '(?m)^DoomPB 0\.3\.0\s*$') "--version prints 'DoomPB 0.3.0' (got: $($result.Output.Trim()))"
 
 $result = Invoke-DoomPB -Arguments @('--help')
 Test-Condition ($result.ExitCode -eq 0) "--help exits with 0 (got $($result.ExitCode))"

@@ -3,21 +3,25 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
-## [Unreleased] - M3 math, BAM angle, geometry, BSP traversal, screen projection/wall clipping, vertical wall projection/frame, textured wall columns/COLORMAP lighting
+## [0.3.0] - 2026-11-27 (prepared; owner commit/tag pending)
 
-M3 is not complete; the application version remains `0.2.0`. No tag or release
-is created for this increment. M3-01, M3-02, M3-03, M3-04, M3-05 and M3-06
-modules/tests are in the working tree. M3-04 produces headless, owned numeric
-screen-column visibility intervals and counters. M3-05 adds checked static viewz,
-exact `R_StoreWallRange`/`R_ScaleFromGlobalAngle` vertical projection and 12-bit
-interpolation, a transactional 320x200 wall-only frame with one-color middle/
-upper/lower tiers, a canonical 64,000-byte frame hash and an opt-in player-start
-preview. M3-06 adds actual composed wall-texture columns for the same tiers,
-exact horizontal texture coordinates/width masks, `dc_iscale` vertical stepping,
-pegging texturemids and vanilla `scalelight[16][48]` `COLORMAP` lighting, plus its
-own opt-in preview, while preserving all M3-05 debug colors/hashes. Complete
-vanilla `drawseg_t`, masked midtexture back-to-front drawing, visplanes/flats, sky,
-sprites and the full world renderer remain later steps.
+M3-07 closes Windows x64 integration of M3-01 through M3-06 as a truthful
+**wall-only textured preview** release scope. Application version `0.3.0` was
+prepared only after mandatory smoke/regression/resource/GUI gates; owner staging,
+commit and annotated tag remain pending. M3-01, M3-02, M3-03, M3-04, M3-05, M3-06
+and M3-07 modules/tests are in the working tree. M3-04 produces headless, owned
+numeric screen-column visibility intervals and counters. M3-05 adds checked static
+viewz, exact `R_StoreWallRange`/`R_ScaleFromGlobalAngle` vertical projection and
+12-bit interpolation, a transactional 320x200 wall-only frame with one-color
+middle/upper/lower tiers and an opt-in player-start preview. M3-06 turns those
+tiers into composed wall-texture columns with exact horizontal coordinates/width
+masks, `dc_iscale` vertical stepping, pegging texturemids and vanilla
+`scalelight[16][48]` `COLORMAP` lighting. M3-07 adds the synthetic MR01-MR36 +
+RI01-RI03 release matrix, optional real-IWAD RI04, BEN01 timing and wired build/
+test targets, preserving the older debug/textured fixture layers. Complete vanilla
+`drawseg_t`, masked midtexture back-to-front drawing, visplanes/flats/sky, sprites,
+gameplay/audio/saves/demos and verified Linux x64 remain later or unverified work.
+
 
 ### Added
 
@@ -514,6 +518,59 @@ M3-06 textured wall columns and vanilla lighting:
   the textured path; total allocations reconcile to pre-loop frame/plan/table/
   clip/cache budgets. Explicit failure paths preserved target bytes. Temporary
   `DBG` instrumentation was replaced by failure-only `diagnostic:` messages.
+
+- M3-07 synthetic release integration, Windows x64 PureBasic 6.41:
+  MR01-MR36 + RI01-RI03 **39 cases / 444 assertions / 0 failures / exit 0**.
+  Optional owner-IWAD RI04 **1 case / 149 assertions / 0 failures / exit 0**;
+  no-argument mode reports **0 cases / 0 assertions / NOT RUN / exit 0**.
+  BEN01 wall-only frame benchmark **1 case / 67 assertions / 0 failures /
+  exit 0** under verified Windows QPC 10 MHz / 1 us resolution.
+- Owner Ultimate Doom 1.9ud fixture (12,408,292 bytes, MD5
+  `c4fe9fd920207691a9f493668e0a2083`) remained byte-for-byte unchanged across
+  the M3-07 RI04 read-only run; only numerics/hashes/counters were printed.
+- Frozen M3-04 span/counter fingerprints and M3-05 debug frame hashes remained
+  reproduced for E1M1/E1M2/E4M1; synthetic TI01/TI02 fixture hashes remained
+  `119A71B79384D465`/`F05D55B8FE8C07EB`.
+- Owner textured FNV observations after full-plane independent recompute and
+  byte-for-byte repeats stayed E1M1 `183BA53FCECECBC8`, E1M2
+  `835A0339A38B190E`, E4M1 `03B5C8CFA517FC7E`; status remains **NOT LOCKED**.
+  Independent raw-PATCH composition compared E1M1/E1M2 six and E4M1 four bounded
+  textures with zero pixel/mask/opaque/width-mask mismatches; raw owner COLORMAP
+  was exhaustively identical table-by-table for all three maps; E1M2/E4M1 bounded
+  first-span column/row/lighting samples matched exactly, while E1M1 reports
+  **NOT RUN** (reason 3: no safe one-sided first-span middle). A complete
+  same-camera original-C wall-only image comparison remains **REFERENCE
+  UNAVAILABLE**, so owner hashes are not claimed C-verified.
+- Windows GUI smoke: TITLEPIC, M3-05 debug and M3-06 textured windows for
+  E1M1/E1M2/E4M1 opened with exact **960x600 client area**, nonblank
+  `PrintWindow`-captured content, normal `WM_CLOSE`, all exit 0. These are
+  window/visual-presence checks; raw 320x200 indexed-byte identity is tested
+  separately in synthetic conversion/frame checks. Captures stayed ignored.
+- BEN01 separates cold end-to-end and warmed frame-only cost: cold 2 warmup +
+  11 measured; warm textured 20 + 100 measured; warm debug 10 + 100 measured.
+  Per-frame microseconds (min/median/p95/mean) vary per host/run; representative
+  direct post-bump runs observed cold `7910/8136/8297/8126` and
+  `8461/8528/8682/8547`, warm textured `5899/6103/6287/6168` and
+  `6422/6628/6758/6634`, warm debug `369/390/399/389` and `370/389/405/390`. No
+  FPS claim beyond a wall-only synthetic preview. Pre-column allocations observed 13 = cache 8 +
+  five frame resources; composed unique textures 3, not per column/pixel.
+- `scripts/build.ps1`/`build.sh` gain `-M3ReleaseTest` / `--m3-release-test`,
+  `-M3ReleaseIwadTest` / `--m3-release-iwad-test` and `-M3ReleaseBenchmark` /
+  `--m3-release-benchmark`; `scripts/test.ps1`/`test.sh` run those harnesses and
+  owner RI04. Actual post-bump owner-path full script rerun: **239/239 checks
+  pass, exit 0**; synthetic-only rerun **175/175 checks pass, exit 0** (with the
+  new gates; historical 148/193 was not preserved artificially).
+- Post-bump executable-level aggregate after the version/script/doc edits:
+  synthetic **732 cases / 6,106 assertions / 0 failures**; owner mode
+  **740 cases / 6,913 assertions / 0 failures** (M2 owner `36/240` replaces its
+  synthetic `35/221`; optional harnesses counted only when actually executed;
+  no double count). All per-executable exits were 0.
+- Linux Bash syntax/runtime: the default Windows `bash.exe` is a WSL stub that
+  failed launching `/bin/bash` (`execvpe /bin/bash failed`); Git Bash
+  `5.2.37(1)-release (x86_64-pc-msys)` was then used and actual
+  `bash -n scripts/build.sh`/`test.sh` both exited 0, which is a syntax-only
+  check. No Linux PureBasic 6.41 build or Linux executable/test run occurred, so
+  Linux x64 runtime remains **NOT RUN**, not a PASS.
 
 ## [0.2.0] - 2026-11-16
 

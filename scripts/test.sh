@@ -16,12 +16,14 @@
 # projection/tier rendering unit WP01-WP56, its synthetic WAD/level/camera/
 # frame integration WI01-WI03 and optional real-IWAD wall-render WI04, M3-06
 # textured wall-column/vanilla-lighting unit WT01-WT60, its synthetic texture/
-# COLORMAP integration TI01-TI03 and optional real-IWAD textured TI04, and
-# smoke tests against the produced executable: --version, --help, no-argument
-# startup, unknown-option handling, --lump-info argument validation and
-# nonblocking --show-title failures. No commercial game data and no display
-# are needed for the synthetic suite. When IWAD_PATH points at an owner-owned
-# legal IWAD, optional M3-03 I04, M3-04 I04, M3-05 WI04, M3-06 TI04 and
+# COLORMAP integration TI01-TI03 and optional real-IWAD textured TI04, M3-07
+# synthetic release integration MR01-MR36 and RI01-RI03, optional real-IWAD
+# release integration RI04, BEN01 wall-only frame timing, and smoke tests
+# against the produced executable: --version, --help, no-argument startup,
+# unknown-option handling, --lump-info argument validation and nonblocking
+# --show-title failures. No commercial game data and no display are needed for
+# the synthetic suite. When IWAD_PATH points at an owner-owned legal IWAD,
+# optional M3-03 I04, M3-04 I04, M3-05 WI04, M3-06 TI04, M3-07 RI04 and
 # --map-info CLI checks additionally run read-only.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
@@ -61,6 +63,9 @@ WALL_RENDER_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallRenderIwadTests"
 WALL_TEXTURE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WallTextureTests"
 WALL_TEXTURE_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallTextureTests"
 WALL_TEXTURE_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallTextureIwadTests"
+M3_RELEASE_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3ReleaseTests"
+M3_RELEASE_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3ReleaseIwadTests"
+M3_RELEASE_BENCHMARK_BIN="${REPO_ROOT}/build/DoomPB-M3ReleaseBenchmark"
 IWAD_PATH="${IWAD_PATH:-}"
 CHECKS=0
 FAILURES=0
@@ -1766,9 +1771,369 @@ else
     fi
 fi
 
+printf '\n== M3-07 synthetic release integration test build ==\n'
+run_build --check --m3-release-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-07 synthetic release test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-07 synthetic release test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-07 synthetic release test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --m3-release-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-07 synthetic release test build exits with 0\n'
+else
+    printf 'FAIL: M3-07 synthetic release test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-07 synthetic release test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${M3_RELEASE_TEST_BIN}" ]; then
+    printf 'PASS: M3-07 synthetic release test output exists: %s\n' "${M3_RELEASE_TEST_BIN}"
+else
+    printf 'FAIL: M3-07 synthetic release test output missing: %s\n' "${M3_RELEASE_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-07 synthetic release test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-07 synthetic release integration tests (MR01-MR36, RI01-RI03) ==\n'
+m3_release_output="$("${M3_RELEASE_TEST_BIN}" 2>&1)"
+m3_release_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${m3_release_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M3-07 release integration tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M3-07 release integration tests exit with %s\n' "${m3_release_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${m3_release_output}" | grep -Eq -- '^RESULT: PASS'; then
+    printf 'PASS: M3-07 synthetic release integration reports PASS\n'
+else
+    printf 'FAIL: M3-07 synthetic release integration did not report PASS\n%s\n' "${m3_release_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${m3_release_output}" | grep -q -- 'Cases: 39, assertions: 444, failures: 0'; then
+    printf 'PASS: M3-07 runs 39 cases/444 assertions/0 failures\n'
+else
+    printf 'FAIL: M3-07 synthetic release case/assertion totals differ\n%s\n' "${m3_release_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+for marker in '[MR36]' '[RI01]' '[RI03]'; do
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_output}" | grep -q -- "${marker}"; then
+        printf 'PASS: M3-07 synthetic suite actually executed %s\n' "${marker}"
+    else
+        printf 'FAIL: M3-07 synthetic release execution marker %s missing\n%s\n' "${marker}" "${m3_release_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+done
+
+printf '\n== M3-07 optional IWAD release integration test build ==\n'
+run_build --check --m3-release-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-07 optional IWAD release test syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-07 optional IWAD release test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-07 optional IWAD release test syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --m3-release-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-07 optional IWAD release test build exits with 0\n'
+else
+    printf 'FAIL: M3-07 optional IWAD release test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-07 optional IWAD release test build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${M3_RELEASE_IWAD_TEST_BIN}" ]; then
+    printf 'PASS: M3-07 optional IWAD release test output exists: %s\n' "${M3_RELEASE_IWAD_TEST_BIN}"
+else
+    printf 'FAIL: M3-07 optional IWAD release test output missing: %s\n' "${M3_RELEASE_IWAD_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-07 optional IWAD release test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-07 optional IWAD release integration tests (RI04) ==\n'
+if [ -z "${IWAD_PATH}" ]; then
+    m3_release_iwad_output="$("${M3_RELEASE_IWAD_TEST_BIN}" 2>&1)"
+    m3_release_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${m3_release_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional M3-07 RI04 tests exit with 0 without a WAD path\n'
+    else
+        printf 'FAIL: optional M3-07 RI04 tests exit with %s\n' "${m3_release_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" | grep -q -- 'NOT RUN'; then
+        printf 'PASS: optional M3-07 RI04 tests report NOT RUN without a path\n'
+    else
+        printf 'FAIL: optional M3-07 RI04 tests did not report NOT RUN\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" | grep -q -- 'Cases: 0, assertions: 0, failures: 0'; then
+        printf 'PASS: optional M3-07 RI04 no-argument mode is clean\n'
+    else
+        printf 'FAIL: optional M3-07 RI04 no-argument totals differ\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    CHECKS=$((CHECKS + 1))
+    if [ -f "${IWAD_PATH}" ]; then
+        printf 'PASS: explicit owner IWAD path exists for M3-07\n'
+    else
+        printf 'FAIL: explicit owner IWAD path does not exist for M3-07\n' >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    m3_release_iwad_output="$("${M3_RELEASE_IWAD_TEST_BIN}" "${IWAD_PATH}" 2>&1)"
+    m3_release_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${m3_release_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional M3-07 RI04 E1M1/E1M2/E4M1 integration exits with 0\n'
+    else
+        printf 'FAIL: optional M3-07 RI04 integration exits with %s\n' "${m3_release_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" | grep -Eq -- '^RESULT: PASS'; then
+        printf 'PASS: optional M3-07 RI04 reports PASS\n'
+    else
+        printf 'FAIL: optional M3-07 RI04 did not report PASS\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" | grep -q -- 'Cases: 1, assertions: 149, failures: 0'; then
+        printf 'PASS: M3-07 RI04 runs 1 case/149 assertions/0 failures\n'
+    else
+        printf 'FAIL: M3-07 RI04 case/assertion totals differ\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" |
+        grep -q -- 'known Ultimate Doom 1.9ud local identity 12408292 bytes/MD5 observed'; then
+        printf 'PASS: M3-07 RI04 observed the known owner IWAD identity\n'
+    else
+        printf 'FAIL: M3-07 RI04 known IWAD identity observation missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    for map_name in E1M1 E1M2 E4M1; do
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${m3_release_iwad_output}" |
+            grep -q -- "${map_name} transactional textured frame"; then
+            printf 'PASS: optional M3-07 actually rendered %s textured frame\n' "${map_name}"
+        else
+            printf 'FAIL: optional M3-07 %s textured frame measurement missing\n%s\n' "${map_name}" "${m3_release_iwad_output}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" | grep -q -- 'E1M1 observed textured hash (NOT LOCKED): 183BA53FCECECBC8'; then
+        printf 'PASS: M3-07 E1M1 observed textured hash remains 183BA53FCECECBC8\n'
+    else
+        printf 'FAIL: M3-07 E1M1 observed textured hash changed or missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" | grep -q -- 'E1M2 observed textured hash (NOT LOCKED): 835A0339A38B190E'; then
+        printf 'PASS: M3-07 E1M2 observed textured hash remains 835A0339A38B190E\n'
+    else
+        printf 'FAIL: M3-07 E1M2 observed textured hash changed or missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" | grep -q -- 'E4M1 observed textured hash (NOT LOCKED): 03B5C8CFA517FC7E'; then
+        printf 'PASS: M3-07 E4M1 observed textured hash remains 03B5C8CFA517FC7E\n'
+    else
+        printf 'FAIL: M3-07 E4M1 observed textured hash changed or missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" |
+        grep -q -- 'E1M1 independent raw-PATCH composition equals production for 6 bounded textures (0 pixel/mask/mask-width mismatch)'; then
+        printf 'PASS: M3-07 E1M1 independent raw composition sampled six textures with zero mismatch\n'
+    else
+        printf 'FAIL: M3-07 E1M1 independent raw composition measurement missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" |
+        grep -q -- 'E1M2 independent raw-PATCH composition equals production for 6 bounded textures (0 pixel/mask/mask-width mismatch)'; then
+        printf 'PASS: M3-07 E1M2 independent raw composition sampled six textures with zero mismatch\n'
+    else
+        printf 'FAIL: M3-07 E1M2 independent raw composition measurement missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" |
+        grep -q -- 'E4M1 independent raw-PATCH composition equals production for 4 bounded textures (0 pixel/mask/mask-width mismatch)'; then
+        printf 'PASS: M3-07 E4M1 independent raw composition sampled four textures with zero mismatch\n'
+    else
+        printf 'FAIL: M3-07 E4M1 independent raw composition measurement missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    for map_name in E1M1 E1M2 E4M1; do
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${m3_release_iwad_output}" |
+            grep -q -- "${map_name} independent raw COLORMAP mismatches: tables 0, texels 0"; then
+            printf 'PASS: M3-07 %s raw COLORMAP is exhaustively identical\n' "${map_name}"
+        else
+            printf 'FAIL: M3-07 %s raw COLORMAP mismatch measurement missing\n%s\n' "${map_name}" "${m3_release_iwad_output}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" |
+        grep -q -- 'E1M1 frame-pixel independent sample NOT RUN: no safe first-span one-sided middle (reason 3)'; then
+        printf 'PASS: M3-07 E1M1 bounded frame-pixel oracle honestly NOT RUN with reason 3\n'
+    else
+        printf 'FAIL: M3-07 E1M1 bounded frame-pixel NOT RUN disclosure missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" |
+        grep -q -- 'E1M2 independent first-span middle pixel samples matched 1, mismatches 0'; then
+        printf 'PASS: M3-07 E1M2 bounded first-span pixel equals target\n'
+    else
+        printf 'FAIL: M3-07 E1M2 bounded first-span pixel measurement missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" |
+        grep -q -- 'E4M1 independent first-span middle pixel samples matched 1, mismatches 0'; then
+        printf 'PASS: M3-07 E4M1 bounded first-span pixel equals target\n'
+    else
+        printf 'FAIL: M3-07 E4M1 bounded first-span pixel measurement missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" |
+        grep -q -- 'residual reference gap: whole clipped-span chronology'; then
+        printf 'PASS: M3-07 RI04 reports the residual full-C-frame comparison gap\n'
+    else
+        printf 'FAIL: M3-07 RI04 residual reference gap disclosure missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_iwad_output}" | grep -Eq -- 'owner IWAD remains unchanged'; then
+        printf 'PASS: optional M3-07 owner IWAD read-only unchanged\n'
+    else
+        printf 'FAIL: optional M3-07 owner IWAD unchanged verification missing\n%s\n' "${m3_release_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+fi
+
+printf '\n== M3-07 wall-only frame benchmark build ==\n'
+run_build --check --m3-release-benchmark
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-07 frame benchmark syntax check exits with 0\n'
+else
+    printf 'FAIL: M3-07 frame benchmark syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-07 frame benchmark syntax check failed.\n' >&2
+    exit 1
+fi
+
+run_build --m3-release-benchmark
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M3-07 frame benchmark build exits with 0\n'
+else
+    printf 'FAIL: M3-07 frame benchmark build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-07 frame benchmark build failed.\n' >&2
+    exit 1
+fi
+
+CHECKS=$((CHECKS + 1))
+if [ -f "${M3_RELEASE_BENCHMARK_BIN}" ]; then
+    printf 'PASS: M3-07 frame benchmark output exists: %s\n' "${M3_RELEASE_BENCHMARK_BIN}"
+else
+    printf 'FAIL: M3-07 frame benchmark output missing: %s\n' "${M3_RELEASE_BENCHMARK_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M3-07 frame benchmark output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M3-07 wall-only frame benchmark (BEN01) ==\n'
+m3_release_benchmark_output="$("${M3_RELEASE_BENCHMARK_BIN}" 2>&1)"
+m3_release_benchmark_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${m3_release_benchmark_status}" -eq 0 ]; then
+    printf 'PASS: M3-07 BEN01 frame benchmark exits with 0\n'
+else
+    printf 'FAIL: M3-07 BEN01 frame benchmark exits with %s\n' "${m3_release_benchmark_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${m3_release_benchmark_output}" | grep -Eq -- '^RESULT: PASS'; then
+    printf 'PASS: M3-07 BEN01 reports PASS\n'
+else
+    printf 'FAIL: M3-07 BEN01 did not report PASS\n%s\n' "${m3_release_benchmark_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${m3_release_benchmark_output}" | grep -q -- 'Cases: 1, assertions: 67, failures: 0'; then
+    printf 'PASS: M3-07 BEN01 runs 1 case/67 assertions/0 failures\n'
+else
+    printf 'FAIL: M3-07 BEN01 case/assertion totals differ\n%s\n' "${m3_release_benchmark_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${m3_release_benchmark_output}" | grep -q -- 'clock frequency 10000000 ticks/s, resolution 1 us'; then
+    printf 'PASS: M3-07 BEN01 uses verified Windows QPC 10 MHz/1 us clock\n'
+else
+    printf 'FAIL: M3-07 BEN01 clock measurement missing\n%s\n' "${m3_release_benchmark_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+for marker in 'cold end-to-end wall preview: cycles 2 warmup' 'warm textured frame-only: cycles 20 warmup' 'warm debug-colour frame-only: cycles 10 warmup'; do
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${m3_release_benchmark_output}" | grep -q -- "${marker}"; then
+        printf 'PASS: M3-07 BEN01 recorded %s\n' "${marker}"
+    else
+        printf 'FAIL: M3-07 BEN01 cycle-count marker missing: %s\n%s\n' "${marker}" "${m3_release_benchmark_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+done
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${m3_release_benchmark_output}" |
+    grep -q -- 'allocations: warm total 13 observed fixture budget 13; compose 3 unique'; then
+    printf 'PASS: M3-07 BEN01 observed fixed pre-column allocation/composition counters\n'
+else
+    printf 'FAIL: M3-07 BEN01 allocation/composition printout missing\n%s\n' "${m3_release_benchmark_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${m3_release_benchmark_output}" |
+    grep -q -- 'No WADReadLump/AllocateMemory/TextureCompose appears in the per-column'; then
+    printf 'PASS: M3-07 BEN01 reports the static per-column draw-path audit\n'
+else
+    printf 'FAIL: M3-07 BEN01 static per-column audit line missing\n%s\n' "${m3_release_benchmark_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
 printf '\n== Smoke tests ==\n'
 
-check_case '--version exits with 0 and prints DoomPB 0.2.0' 0 '^DoomPB 0\.2\.0$' --version
+check_case '--version exits with 0 and prints DoomPB 0.3.0' 0 '^DoomPB 0\.3\.0$' --version
 check_case '--help exits with 0 and prints usage' 0 '^Usage:' --help
 
 # --help also has to mention both options; check that separately to keep the

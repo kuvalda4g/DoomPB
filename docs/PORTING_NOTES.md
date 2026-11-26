@@ -10,7 +10,7 @@ contain guesses, invented upstream commit hashes or copied game data.
 | M0 — repository and reproducible build | complete | first commit `9f84d5d5a3dcbf66be9596fe5299a1209715735b`; CLI, build/test scripts, license and documentation |
 | M1 - WAD loader and `TITLEPIC` | complete in working tree | M1-01 committed as `1e5f7d5`, M1-02 as `e5aad2b`, M1-03 as `b7067f6`; M1-04 and version `0.1.0` are in the working tree pending owner commit/tag; TITLEPIC visually verified on Windows x64; Linux x64 NOT RUN |
 | M2 - Resources and map loading | complete on Windows x64; `v0.2.0` prepared | M2-01 committed as `53ca2db`, M2-02 as `96c793a`, M2-03 as `117708d`, M2-04 as `4020984`, M2-05 as `2fb2481`, M2-06 as `2f170c1`; M2-07 integration/version changes are in the working tree pending owner commit/tag; renderer pending; Linux x64 NOT RUN |
-| M3 - Geometry and first walls | in progress: M3-01, M3-02, M3-03, M3-04 and M3-05 | signed 16.16 math (M3-01), BAM angles/tables/geometry primitives (M3-02), deterministic fixed-camera BSP traversal/trace (M3-03), exact 320-column projection + headless solid/pass wall clipping + source-faithful `R_AddLine` visibility + full `R_CheckBBox` online occlusion (M3-04), and checked static viewz + `R_StoreWallRange`/`R_ScaleFromGlobalAngle` vertical projection + 12-bit interpolation + transactional 320x200 solid-debug-tier frame and opt-in preview (M3-05) implemented and tested in the working tree; textured/masked wall columns, COLORMAP lighting, complete `drawseg_t`, planes/sky/sprites remain M3/M4; `v0.3.0` NOT prepared; Linux x64 NOT RUN |
+| M3 - Geometry and first walls | Windows x64 integration prepared; `v0.3.0` prepared for owner decision | M3-01 signed 16.16 math, M3-02 BAM/tables/geometry primitives, M3-03 deterministic fixed-camera BSP traversal/trace, M3-04 exact 320-column projection + headless solid/pass clipping + `R_AddLine` + full `R_CheckBBox` online occlusion, M3-05 static viewz + `R_StoreWallRange`/`R_ScaleFromGlobalAngle`/12-bit plans + solid-debug-tier frame/preview, M3-06 textured wall columns/width masks/pegged texturemids/`COLORMAP` lighting, and M3-07 synthetic MR01-MR36 + RI01-RI03 release matrix, optional owner RI04 and BEN01 timing are implemented/tested in the working tree; the prepared scope is a **wall-only textured preview**, not a playable engine or complete C-frame equivalence; planes/floors/sky/sprites/masked back-to-front overlay/gameplay/audio remain later; the full same-camera original-C wall-only image comparison is **REFERENCE UNAVAILABLE** and owner textured hashes remain **NOT LOCKED**; owner commit/annotated tag pending; Linux x64 NOT RUN |
 
 Release status for `0.1.0`: Windows x64 build and runtime are verified. Linux
 x64 compilation/runtime remains **NOT RUN**. The `v0.1.0` commit and annotated
@@ -2106,6 +2106,118 @@ screen X, independent middle/top/bottom clip/stepping, deferred
   fuzz column variants, full vanilla `drawseg_t`, dynamic lighting/fixedcolormap,
   gameplay/UI/audio/saves/demos, Linux runtime and CPU timing. `v0.3.0` not
   prepared; version remains `0.2.0`; no tag/commit/push created.
+
+## M3-07 - Windows end-to-end integration, acceptance and v0.3.0 preparation
+
+- Scope and production changes:
+  - No production renderer/decoder algorithm was rewritten or replaced. M3-07
+    adds release test harnesses, script wiring, version expectations and scoped
+    release documentation over the existing accepted M3 modules. The existing
+    `--show-walls` M3-05 debug preview remains separate from
+    `--show-textured-walls` M3-06 textured/COLORMAP preview.
+  - Every WAD-backed read/composition occurs while the owning WAD directory is
+    open. Frame publication happens only after full plan/cache/lighting/private-
+    frame validation; any failure preserves the caller target bytes and leaves a
+    reusable empty `TexturedWallRenderResult`/cache. A->B->A re-resolves patch WAD
+    indexes rather than reusing stale catalog/cache entries.
+- Original pinned source consulted (upstream `a77dfb96cb91780ca334d0d4cfd86957558007e0`):
+  - `r_segs.c` `R_StoreWallRange`/`R_RenderSegLoop` for `rw_scale`/`dc_iscale`/
+    texturecolumn/frac/pixhigh/pixlow and tier pegging assumptions;
+  - `r_draw.c` `R_DrawColumn` for inclusive y/`frac` advance/source row/COLORMAP;
+  - `r_data.c` `R_InitTextures`/`R_GetColumn`/`R_GenerateComposite`/`R_InitColormaps`
+    for texture width mask, raw PATCH post composition and COLORMAP lifetime;
+  - `r_main.c` `R_ScaleFromGlobalAngle` and classic view constants already under
+    M3-05; `r_bsp.c` online occlusion assumptions already under M3-04.
+  - No original C file/function name was invented; production signs/widths wrap/
+    rounding orders preserved from prior M3 fixtures.
+- Test-only independent owner oracles:
+  - raw resolved `PATCH` composition follows vanilla 8-byte header/column table/
+    posts (`topdelta`,`length`,`unused`,`pixels`,`unused`,`0xFF` terminator),
+    placement order, transparency/clipping and `R_InitTextures` highest-power-of-
+    two-not-exceeding-width minus-one mask. E1M1/E1M2 compare six bounded composed
+    textures and E4M1 four: **0 pixel, mask, opaque-count and width-mask mismatch**.
+  - raw owner `COLORMAP` bytes are compared table/texel exhaustively with the
+    decoded `ColormapLookup` domain; actual tables and texels: **0 mismatch** for
+    all three maps.
+  - a safe first chronological one-sided middle span independently rebuilds
+    scale/step interpolation, `xToViewAngle`, BAM centerangle fine tangent,
+    signed/unsigned `rw_offset` -> texturecolumn/width mask, unsigned QPC-style
+    `dc_iscale`, texturemid + centered y frac step, `(frac>>16)&127`, bounded
+    <128 row fallback, original horizontal/vertical light correction and
+    `scalelight` table index -> raw COLORMAP palette byte. E1M2/E4M1 matched one
+    bounded sample with **0 mismatch**; E1M1 frame-pixel oracle is **NOT RUN**
+    because the first span lacks a safe one-sided middle (reason 3).
+  - This sampler does not reconstruct whole clipped-span chronology or a complete
+    same-camera original-C wall-only image. That is explicitly **REFERENCE
+    UNAVAILABLE**, not a PASS. Owner textured FNV observations
+    E1M1/E1M2/E4M1 `183BA53FCECECBC8`/`835A0339A38B190E`/`03B5C8CFA517FC7E`
+    stay **NOT LOCKED**; repeated PB builds, independent fresh-plane FNV and
+    synthetic/Python fixtures are useful regression evidence only.
+- Version/prepared release:
+  - `#DoomPB_Version` was raised to `0.3.0` only after syntax/build, old full
+    regressions, MR01-MR36/RI01-RI03, owner RI04, benchmark, CLI and Windows GUI
+    gates passed. `#M3REL_ExpectedVersion`, MR02/MR36 expectations, M2 legacy CLI
+    and scripts smoke expectations were updated together to `0.3.0`.
+  - Post-bump build/test rerun after the version/script/doc edits passed in both
+    modes: owner **239/239 script checks, 740/6,913/0 executable aggregate**;
+    synthetic-only **175/175 script checks, 732/6,106/0 executable aggregate**;
+    actual CLI `--version` then printed `DoomPB 0.3.0`, and GUI smoke/map-info/
+    dump-info/lump-info/textured/debug modes remained green.
+  - The prepared scope is a wall-only textured preview, not a playable engine or
+    complete M3/M4 claim. Missing intentionally: planes/floors/ceilings/sky,
+    sprites/weapons, two-sided masked midtexture back-to-front overlay,
+    animation/translate/fuzz, gameplay/physics/thinkers, audio/MUS/saves/demos,
+    PWAD overlays and verified Linux x64.
+  - Historical M1/M2/M3 sections above remain accurate for their own release
+    dates/working-tree states; they are not rewritten. Owner staging, commit and
+    annotated `v0.3.0` tag were not performed by this agent.
+- Actual Windows verification (PureBasic banner
+  `PureBasic 6.41 (Windows - x64)`):
+  - synthetic MR01-MR36 + RI01-RI03: **39/444/0, exit 0**; owner RI04:
+    **1/149/0, exit 0**; no owner path: **0/0, NOT RUN, exit 0**; BEN01:
+    **1/67/0, exit 0**.
+  - owner IWAD 12,408,292 bytes/MD5 `c4fe9fd920207691a9f493668e0a2083` unchanged
+    before/after; no payload/pixels/private resources committed or printed.
+  - Windows GUI: TITLEPIC + debug/textured windows for E1M1/E1M2/E4M1 had exact
+    960x600 client areas, nonblank `PrintWindow`-captured content, normal
+    `WM_CLOSE` and exit 0. Captures ignored in `build/`; raw 320x200 indexed bytes
+    vs 3x RGBA remain distinct test layers, so capture presence is not pixel
+    identity.
+  - BEN01 methodology and observed host timings:
+    - verified Windows `kernel32.lib` `QueryPerformanceCounter`/
+      `QueryPerformanceFrequency`, 10,000,000 ticks/s, reported resolution 1 us;
+    - cold end-to-end synthetic TI02 preview 2 warmup + 11 measured, warm
+      textured frame-only 20 + 100 measured, warm legacy debug 10 + 100 measured;
+    - representative direct post-bump observed min/median/p95/mean us: cold
+      `7910/8136/8297/8126` and `8461/8528/8682/8547`, warm textured
+      `5899/6103/6287/6168` and `6422/6628/6758/6634`, warm debug
+      `369/390/399/389` and `370/389/405/390`; timings vary per host/run and are
+      not a Doom FPS claim beyond the wall-only synthetic preview;
+    - allocations 13 = cache 8 + five frame resources, composed 3 unique textures,
+      `CacheTempBytes`/plane/peak checked; per-column `TexturedWallDraw.pbi` source
+      audit counts zero `AllocateMemory(`/`TextureCompose(`/`WADReadLump(`.
+  - `scripts/build.ps1` `-Check`/main build/new M3-07 target builds all exit 0;
+    post-bump owner `scripts/test.ps1` rerun **239/239 checks / exit 0**; synthetic-
+    only rerun **175/175 checks / exit 0** after version/script/doc edits.
+    `scripts/build.sh`/`test.sh` updated in parity but Linux did not run.
+  - post-bump executable-level aggregate actual: synthetic **732 cases /
+    6,106 assertions / 0 failures**; owner mode **740 cases / 6,913 assertions /
+    0 failures** (M2 owner 36/240 replaces synthetic 35/221; optional harnesses
+    count only when actually executed; no double count). All exits 0.
+  - Linux x64: **NOT RUN**. The default Windows `bash.exe` resolved to a WSL stub
+    that failed launching `/bin/bash` (`execvpe /bin/bash failed`). Actual Git
+    Bash `5.2.37(1)-release (x86_64-pc-msys)` was used afterwards, and
+    `bash -n scripts/build.sh`/`test.sh` both exited 0 — a syntax-only check, not
+    Linux validation. No Linux PB 6.41 build/runtime was genuinely executed.
+- Documentation lookup:
+  - Context7 **USED** for `/websites/purebasic`; no pinned/local 6.41 version
+    entry. Focused `query-docs` topics: `ElapsedMilliseconds()` and
+    `Import`/`EndImport`; official PureBasic docs/installed 6.41 help and a
+    disposable compiler probe were then used. Windows QPC `Import "kernel32.lib"`
+    + `QueryPerformanceFrequency(*Frequency)`/`QueryPerformanceCounter(*Count)`/
+    `EndImport` and `@value.q`/PokeQ/PeekQ syntax were verified by real compile
+    and run, not inferred from another language. No WAD/pixels/private paths were
+    sent to Context7. Pinned C remained authoritative for Doom formulas.
 
 ## Compatibility conventions adopted so far
 

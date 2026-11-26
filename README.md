@@ -5,47 +5,44 @@ in **PureBasic**. The goal is to reproduce the behaviour of id Software's
 **Linux Doom 1.10** — software renderer, fixed-point arithmetic, 35 Hz game
 ticks and WAD compatibility — rather than to reimagine it.
 
-> **Status: `0.2.0` — milestone M2 complete on Windows x64; M3-05/M3-06 wall
-> layers in the working tree (owner commit/tag pending).**
-> The executable validates a WAD, looks up and reads lumps, decodes `PLAYPAL`,
-> `COLORMAP`, `PNAMES`, `TEXTURE1`/`TEXTURE2`, composites titles and wall
-> textures, reads flats and sprite metadata, and presents `TITLEPIC` in a native
-> 960x600 window at 3x nearest-neighbour. M2 adds bounds-checked decoders for all
-> ten vanilla map lumps, a validated level loader with cross-reference/BSP/REJECT/
-> BLOCKMAP checks, and end-to-end resource binding of map flats and wall
-> textures. The M3-01 signed 16.16 fixed-point math module, the M3-02 raw BAM
-> angle model, exact vanilla sine/tangent/atan tables and checked geometry
-> primitives (`R_PointToAngle`, `R_PointToDist`, `R_PointOnSide`,
-> `R_PointOnSegSide`) are implemented and tested in the working tree. M3-03 adds
-> a caller-owned fixed camera and a deterministic iterative BSP traversal with an
-> owned chronological `SUBSECTOR`/`SEG` trace: original near-to-far order, no
-> recursion, explicit work stack/event budgets and transactional cleanup. M3-04
-> adds exact `R_InitTextureMapping` `viewangletox`/`xtoviewangle`/`clipangle`
-> tables for the canonical 320-column view, safe owned solid/pass interval
-> clipping, source-faithful `R_AddLine` SOLID/PASS screen-range emission, full
-> `R_CheckBBox` and an online near-to-far walk where the far child is visited only
-> after real occlusion state exists. That output is headless ordered numeric
-> visible span records/counters. M3-05 adds a checked `WallView` (existing camera
-> plus signed 16.16 static `viewz`), `R_StoreWallRange`/`R_ScaleFromGlobalAngle`
-> vertical projection and per-span numeric plans with the original 12-bit
-> `topfrac`/`bottomfrac` interpolation, then a transactional 320x200 wall-only
-> frame that draws **solid debug palette indices** for middle/upper/lower tiers:
-> background `0`, middle `176`, upper `252`, lower `96`. It preserves M3-04 span
-> order/occlusion, writes no texture/flat/sky/light/sprite pixels, emits a
-> canonical FNV-1a64 over the exact 64,000 row-major palette bytes, and adds an
-> opt-in `--iwad <path> --show-walls <ExMy>` 3x preview from the validated
-> player-one start. M3-06 adds opt-in **textured wall columns** for the existing
-> middle/upper/lower tier geometry: exact `rw_offset`/`rw_centerangle`, texture
-> column width mask, `dc_iscale` stepping, pegged middle/upper/lower
-> `dc_texturemid` with `ML_DONTPEGTOP`/`ML_DONTPEGBOTTOM`, bounded <128-height
-> source rows, and static vanilla `scalelight[16][48]` `COLORMAP` lighting. It
-> composes only used visible-tier textures, owns them until frame commit, preserves
-> the old debug frame/hashes and adds `--iwad <path> --show-textured-walls <ExMy>`
-> at 3x. Two-sided masked midtextures are detected and deferred; floors,
-> ceilings, sky, plan flats, masked overlays, sprites and animation remain later
-> M4 steps. M3 as a whole is not complete and `v0.3.0` is not prepared. The
-> application version remains `0.2.0`. Linux x64 runtime is **NOT RUN**. No Git
-> tag exists until the owner creates it.
+> **Status: `0.3.0` — M3-07 Windows integration prepared; owner commit/tag pending.**
+> This release scope is a **wall-only textured preview**, not a playable Doom
+> engine. The executable validates a WAD read-only, decodes `PLAYPAL`,
+> `COLORMAP`, `PNAMES`, `TEXTURE1`/`TEXTURE2`, composes wall textures and flat/
+> sprite metadata, loads and validates the ten vanilla map lumps, derives the
+> player-one static camera, runs the online near-to-far BSP visibility, projects
+> and clips wall spans, composes only visible used textures, applies static
+> vanilla `scalelight[16][48]` `COLORMAP` lighting, and renders middle/upper/lower
+> textured wall tiers into a transactional 320x200 indexed framebuffer. It
+> presents TITLEPIC, legacy M3-05 debug-color walls and M3-06 textured walls at
+> 3x nearest-neighbour (960x600 client); raw 320x200 indexed bytes and 3x RGBA
+> are distinct layers.
+>
+> The M3-01 signed 16.16 fixed-point math, M3-02 BAM/exact tables/geometry, M3-03
+> deterministic cull-free BSP trace, M3-04 projection/clipping/source-faithful
+> `R_AddLine` plus full `R_CheckBBox` online occlusion, M3-05 vertical projection/
+> debug tiers and M3-06 texture mapping/width masks/pegged texturemids/COLORMAP
+> lighting are preserved. M3-07 adds the synthetic MR01-MR36 + RI01-RI03 release
+> matrix, optional real-IWAD RI04 integration for E1M1/E1M2/E4M1, a BEN01 Windows
+> wall-only frame benchmark, and wired build/test targets.
+>
+> Actual Windows results: synthetic release suite 39 cases/444 assertions/0
+> failures; owner RI04 1 case/149 assertions/0 failures. Frozen M3-04 values and
+> M3-05 debug frame hashes (`4A923E4D357C7BD1`, `0C9627E5C2FD8D35`,
+> `9AEB8BDD16834359`) remain reproduced. Owner textured frame observations
+> `183BA53FCECECBC8` (E1M1), `835A0339A38B190E` (E1M2) and
+> `03B5C8CFA517FC7E` (E4M1) repeat byte-identically and are **NOT LOCKED**:
+> independent raw-PATCH composition, exhaustive raw COLORMAP and bounded
+> first-span column/row samples agree, but a complete same-camera C wall-only
+> image comparison is **REFERENCE UNAVAILABLE**.
+>
+> Missing intentionally: floors, ceilings, sky planes, sprites/weapons,
+> two-sided masked midtexture back-to-front overlay, animation, gameplay,
+> audio/saves/demos and verified Linux x64. `<128`-height texture rows use the
+> documented bounded modulo fallback; uncovered mask0 texels follow the composed
+> index0/mask0 policy. CPU timing is a wall-only preview metric, not a Doom FPS
+> claim. Linux x64 runtime is **NOT RUN**. No Git tag exists until the owner
+> commits and creates the annotated tag.
 
 ## Legal notice
 
@@ -164,6 +161,15 @@ repository.
 # Build the optional M3-06 real-IWAD textured frame tests -> build/DoomPB-M3WallTextureIwadTests.exe
 ./scripts/build.ps1 -WallTextureIwadTest
 
+# Build the M3-07 synthetic release integration tests (MR01-MR36, RI01-RI03)
+./scripts/build.ps1 -M3ReleaseTest
+
+# Build the optional M3-07 real-IWAD release integration tests (RI04)
+./scripts/build.ps1 -M3ReleaseIwadTest
+
+# Build the M3-07 BEN01 wall-only frame benchmark
+./scripts/build.ps1 -M3ReleaseBenchmark
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -261,6 +267,15 @@ repository.
 # Build the optional M3-06 real-IWAD textured frame tests -> build/DoomPB-M3WallTextureIwadTests
 ./scripts/build.sh --wall-texture-iwad-test
 
+# Build the M3-07 synthetic release integration tests (MR01-MR36, RI01-RI03)
+./scripts/build.sh --m3-release-test
+
+# Build the optional M3-07 real-IWAD release integration tests (RI04)
+./scripts/build.sh --m3-release-iwad-test
+
+# Build the M3-07 BEN01 wall-only frame benchmark
+./scripts/build.sh --m3-release-benchmark
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
@@ -279,25 +294,29 @@ screen-projection/wall-clipping/occlusion suite (WC01-WC52), its synthetic
 WAD/level/camera/online-visibility integration (I01-I03), the M3-05 vertical wall
 projection/tier suite (WP01-WP56), its synthetic WAD/level/camera/frame
 integration (WI01-WI03), the M3-06 textured wall-column/`COLORMAP` lighting suite
-(WT01-WT60), its synthetic texture/frame integration (TI01-TI03) and all optional
-IWAD harnesses (NOT RUN without a supplied path), plus smoke tests against the
-produced executable. They need no
-game data and no graphical display for the synthetic suite; no window is opened
-by the automated suite without an explicit IWAD path. `--show-title` and
-`--show-walls` remain owner/GUI interactive checks.
+(WT01-WT60), its synthetic texture/frame integration (TI01-TI03), the M3-07
+release integration matrix (MR01-MR36 + RI01-RI03), BEN01 wall-only frame timing,
+and all optional IWAD harnesses (NOT RUN without a supplied path), plus smoke
+tests against the produced executable. They need no game data and no graphical
+display for the synthetic suite; no window is opened by the automated suite
+without an explicit IWAD path. `--show-title`, `--show-walls` and
+`--show-textured-walls` remain owner/GUI interactive checks; Windows GUI smoke is
+reported separately when a display is actually available.
 
 ```powershell
 ./scripts/test.ps1     # Windows; synthetic only, optional IWAD I04 NOT RUN
 
 ./scripts/test.ps1 -IwadPath 'D:\path\to\legally-owned\DOOM.WAD'
-# Windows; adds read-only M3-03/M3-04 I04, M3-05 WI04, M3-06 TI04 and --map-info CLI checks
+# Windows; adds read-only M3-03/M3-04 I04, M3-05 WI04, M3-06 TI04, M3-07 RI04,
+# and --map-info CLI checks
 ```
 
 ```bash
 ./scripts/test.sh      # Linux; synthetic only, optional IWAD I04 NOT RUN
 
 IWAD_PATH=/path/to/legally-owned/DOOM.WAD ./scripts/test.sh
-# Linux; adds read-only M3-03/M3-04 I04, M3-05 WI04, M3-06 TI04 and --map-info CLI checks
+# Linux; adds read-only M3-03/M3-04 I04, M3-05 WI04, M3-06 TI04, M3-07 RI04,
+# and --map-info CLI checks
 ```
 
 A test run fails with a non-zero exit code if any check fails.
@@ -683,12 +702,14 @@ and 764 sprite entries, then loads E1M1/E1M2/E4M1 and calls
 counts and stable metadata checksums. The IWAD is never modified, and no game
 content or reconstructed images are written.
 
-Known limitations at `0.2.0`: single-WAD operation, no PWAD overlay support, no
-generic `LumpCache` or renderer-side column cache, no drawseg/column/plane/sprite
-drawing or gameplay, and no Linux runtime validation. M3-04 publishes headless
-visible wall-column interval records only; it does not paint a frame or claim
-textured walls. `F_SKY1` is accepted as an ordinary flat for resource binding;
-sky rendering belongs to M4.
+Known limitations in the prepared `0.3.0` wall-only scope: single-IWAD
+operation, no PWAD overlay support, no generic `LumpCache`, no complete vanilla
+`drawseg_t` list, no floors/ceilings/sky visplanes, no sprites or weapon overlay,
+no masked two-sided midtexture back-to-front pass, no animation/gameplay/audio/
+saves/demos, and no Linux runtime validation. M3-04's headless visible interval
+records remain its own layer; M3-05/M3-06 then paint the visible **wall tiers**
+only (debug and textured), never planes or sky. `F_SKY1` is accepted as an
+ordinary flat for resource binding; sky rendering belongs to M4.
 
 ## Fixed camera and deterministic BSP traversal (M3-03)
 
@@ -903,6 +924,54 @@ waits for `#PB_Event_CloseWindow` without a busy loop. All window, image and
 RGBA resources are released on close and on every failure path. Automated tests
 do not open a window; visual acceptance of the title screen remains an owner
 check.
+
+## M3-07 integration and prepared v0.3.0 release scope
+
+`tests/integration/m3_release_tests.pb` reuses the existing verified pipeline and
+adds 36 focused synthetic acceptance cases MR01-MR36 plus the three full-pipeline
+cases RI01-RI03. `m3_release_iwad_tests.pb` is optional RI04 for the owner's legal
+IWAD (E1M1/E1M2/E4M1, read-only, `NOT RUN` cleanly without a path).
+`m3_release_benchmark.pb` is BEN01 cold end-to-end and warmed textured/debug
+wall-frame timing under a verified 10 MHz/1 us Windows QPC clock.
+
+Actual Windows results with the known local Ultimate Doom 1.9ud fixture:
+
+- Synthetic release: 39 cases/444 assertions/0 failures, exit 0. Owner RI04:
+  1 case/149 assertions/0 failures, exit 0.
+- Frozen M3-04 visibility/counter fingerprints and M3-05 debug frame hashes are
+  preserved; synthetic TI01/TI02 fixture hashes remain unchanged.
+- Owner textured FNV observations remain `183BA53FCECECBC8`, `835A0339A38B190E`
+  and `03B5C8CFA517FC7E` after byte-for-byte repeat checks. Status is **NOT
+  LOCKED**: independent raw-patch composition, exhaustive raw COLORMAP and
+  bounded first-span samples agree, but no complete same-camera original-C
+  wall-only image comparison is available; E1M1 lacks a safe one-sided
+  first-span middle for the bounded pixel oracle.
+- GUI smoke opened/closed TITLEPIC, M3-05 debug and M3-06 textured windows at an
+  exact 960x600 client area for all three maps; captures remain ignored. This is
+  visual/window evidence, not raw-pixel identity.
+- Benchmark: separate cold (2 warmup + 11 measured) and warm textured (20 +
+  100 measured) / warm debug (10 + 100 measured) runs; timings are host-specific
+  and not a Doom FPS claim. Pre-column allocations stay fixed (cache 8 + five
+  frame resources for the synthetic TI02 scene) and compose only three unique
+  textures; no per-column allocation/compose/WAD read exists in the draw source.
+
+Actual post-bump regression after the version/script/doc edits: owner-path
+`scripts/test.ps1` **239/239 checks, exit 0**; synthetic-only
+`scripts/test.ps1` **175/175 checks, exit 0**. Executable-level aggregate was
+**732 cases / 6,106 assertions / 0 failures** synthetic and **740 cases /
+6,913 assertions / 0 failures** owner mode (M2 owner `36/240` replaces its
+synthetic `35/221`; optional owner harnesses counted only when executed). Frozen
+and new fixtures stayed unchanged. BEN01 timings vary per host/run; representative
+post-bump runs observed cold (min/median/p95/mean us) `7910/8136/8297/8126` and
+`8461/8528/8682/8547`, warm textured `5899/6103/6287/6168` and
+`6422/6628/6758/6634`, warm debug `369/390/399/389` and `370/389/405/390`; these
+are host-specific wall-only preview metrics, not a game FPS claim.
+
+CHANGELOG/DEVELOPMENT_PLAN/PORTING_NOTES record the same scoped results. The
+version was raised from `0.2.0` to `0.3.0` only after the mandatory gates, and
+the full regression/CLI/GUI checks were rerun after the version change. Linux
+x64 runtime remains **NOT RUN**. The owner decides whether to stage, commit and
+tag.
 
 ## Repository layout
 

@@ -19,6 +19,10 @@
     -WallTextureIntegrationTest (TI01-TI03 synthetic frames) and
     -WallTextureIwadTest (optional TI04 owner-IWAD textured frames).
 
+    M3-07 release variant targets are -M3ReleaseTest (MR01-MR36 and RI01-RI03
+    synthetic integration), -M3ReleaseIwadTest (optional RI04 owner-IWAD
+    release integration) and -M3ReleaseBenchmark (BEN01 wall-only frame timing).
+
 .PARAMETER Check
     Run only the PureBasic syntax check; no executable is produced.
 
@@ -224,6 +228,15 @@
 
 .EXAMPLE
     ./scripts/build.ps1 -WallTextureIwadTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -M3ReleaseTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -M3ReleaseIwadTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -M3ReleaseBenchmark
 #>
 [CmdletBinding()]
 param(
@@ -256,6 +269,9 @@ param(
     [switch]$WallTextureTest,
     [switch]$WallTextureIntegrationTest,
     [switch]$WallTextureIwadTest,
+    [switch]$M3ReleaseTest,
+    [switch]$M3ReleaseIwadTest,
+    [switch]$M3ReleaseBenchmark,
     [string]$CompilerPath = ''
 )
 
@@ -294,12 +310,24 @@ if ($WallRenderIwadTest) { $selectedTargets++ }
 if ($WallTextureTest) { $selectedTargets++ }
 if ($WallTextureIntegrationTest) { $selectedTargets++ }
 if ($WallTextureIwadTest) { $selectedTargets++ }
+if ($M3ReleaseTest) { $selectedTargets++ }
+if ($M3ReleaseIwadTest) { $selectedTargets++ }
+if ($M3ReleaseBenchmark) { $selectedTargets++ }
 if ($selectedTargets -gt 1) {
     Write-Host 'error: test targets select different programs; choose one.' -ForegroundColor Red
     exit 1
 }
 
-if ($WallTextureIwadTest) {
+if ($M3ReleaseTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_release_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3ReleaseTests.exe'
+} elseif ($M3ReleaseIwadTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_release_iwad_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3ReleaseIwadTests.exe'
+} elseif ($M3ReleaseBenchmark) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m3_release_benchmark.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M3ReleaseBenchmark.exe'
+} elseif ($WallTextureIwadTest) {
     $sourceFile = Join-Path $repoRoot 'tests\integration\m3_wall_texture_iwad_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-M3WallTextureIwadTests.exe'
 } elseif ($WallTextureIntegrationTest) {

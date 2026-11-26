@@ -1662,7 +1662,7 @@ Procedure TestE31()
 
   output = RunCli("--version", @exitCode)
   Check(Bool(exitCode = 0), "--version exits 0")
-  Check(Bool(FindString(output, "DoomPB 0.2.0") > 0), "--version reports 0.2.0")
+  Check(Bool(FindString(output, "DoomPB 0.3.0") > 0), "--version reports 0.3.0")
 
   output = RunCli("--help", @exitCode)
   Check(Bool(exitCode = 0), "--help exits 0")
