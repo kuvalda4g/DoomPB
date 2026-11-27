@@ -5,7 +5,7 @@ in **PureBasic**. The goal is to reproduce the behaviour of id Software's
 **Linux Doom 1.10** — software renderer, fixed-point arithmetic, 35 Hz game
 ticks and WAD compatibility — rather than to reimagine it.
 
-> **Status: `0.3.0` — M3-07 Windows integration prepared; owner commit/tag pending.**
+> **Status: `0.3.0` — M3-07 Windows integration release with an observed annotated v0.3.0 tag, plus the M4-01 partial development slice in the working tree; this M4-01 slice adds no commit/tag.**
 > This release scope is a **wall-only textured preview**, not a playable Doom
 > engine. The executable validates a WAD read-only, decodes `PLAYPAL`,
 > `COLORMAP`, `PNAMES`, `TEXTURE1`/`TEXTURE2`, composes wall textures and flat/
@@ -26,23 +26,44 @@ ticks and WAD compatibility — rather than to reimagine it.
 > matrix, optional real-IWAD RI04 integration for E1M1/E1M2/E4M1, a BEN01 Windows
 > wall-only frame benchmark, and wired build/test targets.
 >
+> M4-01 adds online visplane collection in the unchanged M3 BSP/wall pass,
+> source-order `R_FindPlane`/`R_CheckPlane`, pre-clip `R_MarkFloor`/
+> `R_MarkCeiling` bands and post-wall `R_DrawPlanes` with real 64x64 `FlatLoad`
+> data remapped by `zlight[16][128]`/`COLORMAP`. `F_SKY1` is recognized,
+> normalized and deferred with counts, never loaded or drawn as an ordinary flat.
+> The opt-in `--show-planes <ExMy>` preview presents combined walls+floors+
+> ceilings for E1M1/E1M2/E4M1 at 3x nearest-neighbour.
+>
 > Actual Windows results: synthetic release suite 39 cases/444 assertions/0
-> failures; owner RI04 1 case/149 assertions/0 failures. Frozen M3-04 values and
+> failures; owner RI04 1 case/149 assertions/0 failures; M4-01 unit PL01-PL60
+> 60 cases/211 assertions/0 failures; synthetic PI01-PI03 3 cases/76 assertions/
+> 0 failures; owner PI04 1 case/150 assertions/0 failures. Frozen M3-04 values and
 > M3-05 debug frame hashes (`4A923E4D357C7BD1`, `0C9627E5C2FD8D35`,
 > `9AEB8BDD16834359`) remain reproduced. Owner textured frame observations
 > `183BA53FCECECBC8` (E1M1), `835A0339A38B190E` (E1M2) and
 > `03B5C8CFA517FC7E` (E4M1) repeat byte-identically and are **NOT LOCKED**:
 > independent raw-PATCH composition, exhaustive raw COLORMAP and bounded
 > first-span column/row samples agree, but a complete same-camera C wall-only
-> image comparison is **REFERENCE UNAVAILABLE**.
+> image comparison is **REFERENCE UNAVAILABLE**. New owner combined wall+flat
+> frame hashes `B6C3BD9880758292` (E1M1), `D32BD22FF01A9BBB` (E1M2) and
+> `0AFA2E970F9C08C8` (E4M1) are printed **NOT LOCKED** pending an independent
+> same-camera source comparison; explicit coverage/counter audits are reported.
+> Full Windows regression scripts run **211/211 checks** without an IWAD and
+> **291/291 checks** with the owner IWAD, both exit 0; seven `--show-planes` CLI
+> smoke cases (13 assertions) pass alongside all prior suites. Real GUI previews
+> E1M1/E1M2/E4M1 open at a 960x600 client area, close with exit 0, and captured
+> client frames visually confirm textured floors/ceilings with deferred black
+> `F_SKY1` background and no observed wall overwrite/striping (screenshots kept
+> only in ignored temp storage, not committed).
 >
-> Missing intentionally: floors, ceilings, sky planes, sprites/weapons,
+> Missing intentionally: deferred sky pixel texture, sprites/weapons,
 > two-sided masked midtexture back-to-front overlay, animation, gameplay,
 > audio/saves/demos and verified Linux x64. `<128`-height texture rows use the
 > documented bounded modulo fallback; uncovered mask0 texels follow the composed
 > index0/mask0 policy. CPU timing is a wall-only preview metric, not a Doom FPS
-> claim. Linux x64 runtime is **NOT RUN**. No Git tag exists until the owner
-> commits and creates the annotated tag.
+> claim. Linux x64 runtime is **NOT RUN**. The prior owner release already has
+> release tags v0.0.1-v0.3.0 (all annotated; v0.3.0 dated 2026-11-27); this
+> M4-01 slice adds no commit, tag or push.
 
 ## Legal notice
 
@@ -170,6 +191,15 @@ repository.
 # Build the M3-07 BEN01 wall-only frame benchmark
 ./scripts/build.ps1 -M3ReleaseBenchmark
 
+# Build the M4-01 visplane/flat/zlight unit tests (PL01-PL60)
+./scripts/build.ps1 -PlaneTest
+
+# Build the M4-01 synthetic combined wall+flat integration tests (PI01-PI03)
+./scripts/build.ps1 -PlaneIntegrationTest
+
+# Build the optional M4-01 real-IWAD combined walls+flats tests (PI04)
+./scripts/build.ps1 -PlaneIwadTest
+
 # Explicit compiler selection
 ./scripts/build.ps1 -CompilerPath 'C:\Program Files\PureBasic\Compilers\pbcompiler.exe'
 ```
@@ -276,6 +306,15 @@ repository.
 # Build the M3-07 BEN01 wall-only frame benchmark
 ./scripts/build.sh --m3-release-benchmark
 
+# Build the M4-01 visplane/flat/zlight unit tests (PL01-PL60)
+./scripts/build.sh --plane-test
+
+# Build the M4-01 synthetic combined wall+flat integration tests (PI01-PI03)
+./scripts/build.sh --plane-integration-test
+
+# Build the optional M4-01 real-IWAD combined walls+flats tests (PI04)
+./scripts/build.sh --plane-iwad-test
+
 # Explicit compiler selection
 PB_COMPILER=/opt/purebasic/compilers/pbcompiler ./scripts/build.sh
 ```
@@ -296,7 +335,9 @@ projection/tier suite (WP01-WP56), its synthetic WAD/level/camera/frame
 integration (WI01-WI03), the M3-06 textured wall-column/`COLORMAP` lighting suite
 (WT01-WT60), its synthetic texture/frame integration (TI01-TI03), the M3-07
 release integration matrix (MR01-MR36 + RI01-RI03), BEN01 wall-only frame timing,
-and all optional IWAD harnesses (NOT RUN without a supplied path), plus smoke
+the M4-01 visplane/real-flat/`zlight` suite (PL01-PL60), its synthetic combined
+wall+flat integration (PI01-PI03), and all optional IWAD harnesses (NOT RUN
+without a supplied path; M4-01 PI04 included), plus smoke
 tests against the produced executable. They need no game data and no graphical
 display for the synthetic suite; no window is opened by the automated suite
 without an explicit IWAD path. `--show-title`, `--show-walls` and
@@ -335,6 +376,10 @@ DoomPB --iwad <path> --show-walls <ExMy> Render an M3-05 wall-only debug-color
 DoomPB --iwad <path> --show-textured-walls <ExMy>
                                         Render an M3-06 textured wall-only
                                         COLORMAP-lit 320x200 frame at 3x.
+DoomPB --iwad <path> --show-planes <ExMy>
+                                        Render the M4-01 combined walls+
+                                        floors+ceilings frame at 3x; F_SKY1
+                                        stays deferred background.
 DoomPB                                   Print the bootstrap status and exit.
 ```
 
@@ -349,6 +394,12 @@ canonical map lumps through the M2-06 loader, runs cross-reference/BSP/REJECT/
 BLOCKMAP validation and prints counts and diagnostics only. None of these
 options prints lump contents. A missing or malformed WAD, a missing lump, an
 invalid map or a graphics failure is reported with a non-zero exit code.
+`--show-planes <ExMy>` builds the same online M3 visibility/plane chronology as
+the headless M4-01 frame, loads only used non-sky 64x64 flats, draws floors and
+ceilings after the textured walls with `zlight[16][128]`/`COLORMAP` remapping,
+and leaves `F_SKY1` regions deferred rather than substituting a flat texture. It
+still has no sky pixel texture, masked-midtexture back-to-front overlay, sprites,
+weapon or gameplay overlay.
 
 | Exit code | Meaning |
 |---|---|

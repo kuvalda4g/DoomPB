@@ -112,6 +112,9 @@ XIncludeFile "../Graphics/TextureDefs.pbi"
 XIncludeFile "Geometry.pbi"
 XIncludeFile "Camera.pbi"
 XIncludeFile "Projection.pbi"
+XIncludeFile "WallSpanDefs.pbi"
+XIncludeFile "WallIdentity.pbi"
+XIncludeFile "PlaneFill.pbi"
 XIncludeFile "ClipSegs.pbi"
 
 #WALLVIS_Magic = $57565331
@@ -150,18 +153,6 @@ XIncludeFile "ClipSegs.pbi"
 #WALL_CHECKCOORD_ROWS = 12
 #WALL_CHECKCOORD_COLS = 4
 
-Structure WallSpan
-  Subsector.l
-  Seg.l
-  Linedef.l
-  Side.l
-  FrontSector.l
-  BackSector.l
-  FirstX.l
-  LastX.l
-  Kind.l
-EndStructure
-
 Structure WallVisibilityResult
   Magic.l
   Count.l
@@ -197,10 +188,6 @@ Structure WallWorkItem
   Box.l
 EndStructure
 
-Structure WallSlotNameOut
-  Value.s
-EndStructure
-
 ; Exact R_CheckBBox checkcoord[12][4] bytes. Rows 0..10 are the source list;
 ; rows 3/7 are {0} placeholders, row 5 is the unreachable inside-box row, and
 ; row 11 is the C declaration's zero-filled trailing row. Only 0,1,2,4,5,6,
@@ -214,6 +201,8 @@ EndDataSection
 
 Global *gWallCheckCoordData = ?WallCheckCoordData
 Global gWall_LastError.s = ""
+
+
 
 Procedure WallSetError(Message.s)
   gWall_LastError = Message
@@ -551,221 +540,6 @@ Procedure.i WallBoxPosition(CameraX.l, CameraY.l, BoxTop.l, BoxBottom.l,
 EndProcedure
 
 ; ---------------------------------------------------------------------------
-; Canonical map slot-name readers (local, no MapValidate coupling)
-; ---------------------------------------------------------------------------
-; Status: 0 = canonical name in *Out\Value, 1 = canonical unused "-"/all-NUL
-; slot, 2 = noncanonical name (embedded NUL / trailing bytes / nonprintable),
-; 3 = decoder/API read failure with an explicit error.
-Procedure.i WallFlatSlotStatus(*Level.MapLevel, SectorIndex.l, Field.l, *Out.WallSlotNameOut)
-  Protected byteIndex.i
-  Protected value.i
-  Protected sawNul.i = 0
-  Protected result.s = ""
-
-  sawNul = #False
-  For byteIndex = 0 To 7
-    value = MapSectorsNameByte(@*Level\Sectors, SectorIndex, Field, byteIndex)
-    If value < 0
-      WallSetError("Wall flat slot read failed at " + *Level\Name + " sector " + Str(SectorIndex) + " field " + Str(Field) + ".")
-      ProcedureReturn 3
-    EndIf
-    If sawNul
-      If value <> 0 And value <> 32
-        ProcedureReturn 2
-      EndIf
-    ElseIf value = 0
-      sawNul = #True
-    ElseIf value < 32 Or value > 126
-      ProcedureReturn 2
-    Else
-      result + Chr(value)
-    EndIf
-  Next
-  If Len(result) = 0
-    ProcedureReturn 2
-  EndIf
-  *Out\Value = result
-  ProcedureReturn 0
-EndProcedure
-
-Procedure.i WallWallSlotStatus(*Level.MapLevel, SideIndex.l, Field.l, *Out.WallSlotNameOut)
-  Protected byteIndex.i
-  Protected value.i
-  Protected sawNul.i = 0
-  Protected result.s = ""
-
-  value = MapSidedefsNameByte(@*Level\Sidedefs, SideIndex, Field, 0)
-  If value < 0
-    WallSetError("Wall wall slot read failed at " + *Level\Name + " sidedef " + Str(SideIndex) + " field " + Str(Field) + ".")
-    ProcedureReturn 3
-  EndIf
-  If value = 0 Or value = Asc("-")
-    For byteIndex = 1 To 7
-      value = MapSidedefsNameByte(@*Level\Sidedefs, SideIndex, Field, byteIndex)
-      If value < 0
-        WallSetError("Wall wall slot read failed at " + *Level\Name + " sidedef " + Str(SideIndex) + " field " + Str(Field) + ".")
-        ProcedureReturn 3
-      EndIf
-      If value <> 0 And value <> 32
-        ProcedureReturn 2
-      EndIf
-    Next
-    *Out\Value = ""
-    ProcedureReturn 1
-  EndIf
-
-  sawNul = #False
-  For byteIndex = 0 To 7
-    value = MapSidedefsNameByte(@*Level\Sidedefs, SideIndex, Field, byteIndex)
-    If value < 0
-      WallSetError("Wall wall slot read failed at " + *Level\Name + " sidedef " + Str(SideIndex) + " field " + Str(Field) + ".")
-      ProcedureReturn 3
-    EndIf
-    If sawNul
-      If value <> 0 And value <> 32
-        ProcedureReturn 2
-      EndIf
-    ElseIf value = 0
-      sawNul = #True
-    ElseIf value < 32 Or value > 126
-      ProcedureReturn 2
-    Else
-      result + Chr(value)
-    EndIf
-  Next
-  If Len(result) = 0
-    ProcedureReturn 2
-  EndIf
-  *Out\Value = result
-  ProcedureReturn 0
-EndProcedure
-
-; Flat identity between two sectors for one field, catalog-aware or canonical
-; raw-byte fallback. Returns #False only on a genuine API/resource error/read
-; failure; noncanonical fallback names yield Same=0 (conservative PASS).
-Procedure.i WallSectorFlatIdentity(*Level.MapLevel, *Flats.FlatCatalog,
-                                   SectorA.l, SectorB.l, Field.l, *Same.Long)
-  Protected statusA.i
-  Protected statusB.i
-  Protected nameA.WallSlotNameOut
-  Protected nameB.WallSlotNameOut
-  Protected indexA.i
-  Protected indexB.i
-  Protected byteIndex.i
-  Protected byteA.i
-  Protected byteB.i
-
-  If *Flats <> 0
-    statusA = WallFlatSlotStatus(*Level, SectorA, Field, @nameA)
-    If statusA = 3
-      ProcedureReturn #False
-    EndIf
-    If statusA <> 0
-      WallSetError("Wall flats: " + *Level\Name + " sector " + Str(SectorA) +
-                   " has a noncanonical floor/ceiling flat slot.")
-      ProcedureReturn #False
-    EndIf
-    statusB = WallFlatSlotStatus(*Level, SectorB, Field, @nameB)
-    If statusB = 3
-      ProcedureReturn #False
-    EndIf
-    If statusB <> 0
-      WallSetError("Wall flats: " + *Level\Name + " sector " + Str(SectorB) +
-                   " has a noncanonical floor/ceiling flat slot.")
-      ProcedureReturn #False
-    EndIf
-    indexA = FlatCatalogFindName(*Flats, nameA\Value)
-    If indexA < 0
-      WallSetError("Wall flats: " + *Level\Name + " sector " + Str(SectorA) +
-                   " flat not found in the catalog: " + nameA\Value)
-      ProcedureReturn #False
-    EndIf
-    indexB = FlatCatalogFindName(*Flats, nameB\Value)
-    If indexB < 0
-      WallSetError("Wall flats: " + *Level\Name + " sector " + Str(SectorB) +
-                   " flat not found in the catalog: " + nameB\Value)
-      ProcedureReturn #False
-    EndIf
-    *Same\l = Bool(indexA = indexB)
-    ProcedureReturn #True
-  EndIf
-
-  ; Canonical raw eight-byte fallback; no resolved index is invented. Any
-  ; noncanonical slot is conservatively "not identical".
-  statusA = WallFlatSlotStatus(*Level, SectorA, Field, @nameA)
-  If statusA = 3
-    ProcedureReturn #False
-  EndIf
-  statusB = WallFlatSlotStatus(*Level, SectorB, Field, @nameB)
-  If statusB = 3
-    ProcedureReturn #False
-  EndIf
-  If statusA <> 0 Or statusB <> 0
-    *Same\l = 0
-    ProcedureReturn #True
-  EndIf
-  For byteIndex = 0 To 7
-    byteA = MapSectorsNameByte(@*Level\Sectors, SectorA, Field, byteIndex)
-    byteB = MapSectorsNameByte(@*Level\Sectors, SectorB, Field, byteIndex)
-    If byteA < 0 Or byteB < 0
-      WallSetError("Wall flats: raw eight-byte comparison read failed.")
-      ProcedureReturn #False
-    EndIf
-    If byteA <> byteB
-      *Same\l = 0
-      ProcedureReturn #True
-    EndIf
-  Next
-  *Same\l = 1
-  ProcedureReturn #True
-EndProcedure
-
-; Middle-texture absence for the seg-selected sidedef. Catalog-aware returns the
-; original numeric `midtexture==0` result; fallback treats canonical "-"/all-NUL
-; as absent and malformed slots as present (conservative PASS).
-Procedure.i WallMiddleTextureAbsent(*Level.MapLevel, *Textures.TextureCatalog,
-                                    SideIndex.l, *Absent.Long)
-  Protected status.i
-  Protected nameSlot.WallSlotNameOut
-  Protected resolvedIndex.i
-
-  If *Textures <> 0
-    status = WallWallSlotStatus(*Level, SideIndex, 2, @nameSlot)
-    If status = 3
-      ProcedureReturn #False
-    EndIf
-    If status = 2
-      WallSetError("Wall textures: " + *Level\Name + " sidedef " + Str(SideIndex) +
-                   " middle slot is noncanonical.")
-      ProcedureReturn #False
-    EndIf
-    If status = 1
-      *Absent\l = 1
-      ProcedureReturn #True
-    EndIf
-    resolvedIndex = TextureCatalogFindName(*Textures, nameSlot\Value)
-    If resolvedIndex < 0
-      WallSetError("Wall textures: " + *Level\Name + " sidedef " + Str(SideIndex) +
-                   " middle texture not found in the catalog: " + nameSlot\Value)
-      ProcedureReturn #False
-    EndIf
-    *Absent\l = Bool(resolvedIndex = 0)
-    ProcedureReturn #True
-  EndIf
-
-  status = WallWallSlotStatus(*Level, SideIndex, 2, @nameSlot)
-  If status = 3
-    ProcedureReturn #False
-  EndIf
-  If status = 1
-    *Absent\l = 1
-    ProcedureReturn #True
-  EndIf
-  *Absent\l = 0
-  ProcedureReturn #True
-EndProcedure
-
-; ---------------------------------------------------------------------------
 ; R_AddLine equivalent
 ; ---------------------------------------------------------------------------
 ; CameraX/CameraY/Heading are explicit fixed/BAM values so the core is pure and
@@ -1031,15 +805,15 @@ Procedure.i WallAddLineCore(*Level.MapLevel, *Projection.Projection,
     Else
       sameLight = Bool(backLight = frontLight)
       If WallSectorFlatIdentity(*Level, *Flats, frontSector, backSector, 0, @sameFloor) = #False
-        WallSetError("Wall R_AddLine: floor flat identity failed: " + WallVisibilityLastError())
+        WallSetError("Wall R_AddLine: floor flat identity failed: " + WallIdentityLastError())
         ProcedureReturn #False
       EndIf
       If WallSectorFlatIdentity(*Level, *Flats, frontSector, backSector, 1, @sameCeiling) = #False
-        WallSetError("Wall R_AddLine: ceiling flat identity failed: " + WallVisibilityLastError())
+        WallSetError("Wall R_AddLine: ceiling flat identity failed: " + WallIdentityLastError())
         ProcedureReturn #False
       EndIf
       If WallMiddleTextureAbsent(*Level, *Textures, selectedSide, @middleAbsent) = #False
-        WallSetError("Wall R_AddLine: middle texture identity failed: " + WallVisibilityLastError())
+        WallSetError("Wall R_AddLine: middle texture identity failed: " + WallIdentityLastError())
         ProcedureReturn #False
       EndIf
       If sameFloor <> 0 And sameCeiling <> 0 And sameLight <> 0 And middleAbsent <> 0
@@ -1392,11 +1166,14 @@ EndProcedure
 ; ---------------------------------------------------------------------------
 Procedure.i WallVisibilityBuild(*Level.MapLevel, *Camera.BspCamera,
                                 *Projection.Projection, *Flats.FlatCatalog,
-                                *Textures.TextureCatalog, *Result.WallVisibilityResult)
+                                *Textures.TextureCatalog, *Result.WallVisibilityResult,
+                                ViewZFixed.l = 0, *PlaneFrame.PlaneFrame = 0,
+                                *Timeline.WallPlaneTimeline = 0)
   Protected cameraX.l = 0
   Protected cameraY.l = 0
   Protected heading.q = 0
   Protected projectionWidth.l = 0
+  Protected projectionHeight.l = 0
   Protected nodeCount.l
   Protected subCount.l
   Protected segCount.l
@@ -1470,6 +1247,46 @@ Procedure.i WallVisibilityBuild(*Level.MapLevel, *Camera.BspCamera,
   Protected stackAllocations.l = 0
   Protected resultAllocations.l = 0
   Protected savedFailureText.s = ""
+  Protected planeEnabled.i = #False
+  Protected planeFrameStarted.i = #False
+  Protected timelineStarted.i = #False
+  Protected planeClipStarted.i = #False
+  Protected skyFlatIndex.l = -1
+  Protected planeClip.WallVerticalClip
+  Protected planeTally.PlaneFillTally
+  Protected floorPlane.l = -1
+  Protected ceilingPlane.l = -1
+  Protected floorSky.l = 0
+  Protected ceilingSky.l = 0
+  Protected recordSky.l = 0
+  Protected floorEligible.l = 0
+  Protected ceilingEligible.l = 0
+  Protected leafEmittedSpans.l = 0
+  Protected fillSpan.WallSpan
+  Protected plan.WallSpanPlan
+  Protected fillIndex.i
+  Protected ceilingBefore.l = -1
+  Protected floorBefore.l = -1
+  Protected ceilingHandle.l = -1
+  Protected floorHandle.l = -1
+  Protected tallyPcBefore.l = 0
+  Protected tallyCcBefore.l = 0
+  Protected tallyFcBefore.l = 0
+  Protected tallyCmBefore.l = 0
+  Protected tallyCsBefore.l = 0
+  Protected tallyFmBefore.l = 0
+  Protected tallyFsBefore.l = 0
+  Protected tallyCbBefore.l = 0
+  Protected tallyFbBefore.l = 0
+  Protected deltaPc.l = 0
+  Protected deltaCc.l = 0
+  Protected deltaFc.l = 0
+  Protected deltaCm.l = 0
+  Protected deltaCs.l = 0
+  Protected deltaFm.l = 0
+  Protected deltaFs.l = 0
+  Protected deltaCb.l = 0
+  Protected deltaFb.l = 0
 
   WallSetError("")
   If *Result = 0
@@ -1491,13 +1308,35 @@ Procedure.i WallVisibilityBuild(*Level.MapLevel, *Camera.BspCamera,
     WallSetError("Wall visibility build: projection is not initialized.")
     ProcedureReturn #False
   EndIf
-  If ProjectionGetConstants(*Projection, @projectionWidth, 0, 0, 0, 0, 0, 0, 0, 0) = #False
+  If ProjectionGetConstants(*Projection, @projectionWidth, @projectionHeight,
+                            0, 0, 0, 0, 0, 0, 0) = #False
     WallSetError("Wall visibility build: cannot read projection width: " + ProjectionLastError())
     ProcedureReturn #False
   EndIf
   If projectionWidth <> #PROJ_VIEWWIDTH
     WallSetError("Wall visibility build requires the canonical 320-column projection; got " + Str(projectionWidth) + ".")
     ProcedureReturn #False
+  EndIf
+
+  planeEnabled = Bool(*PlaneFrame <> 0 Or *Timeline <> 0)
+  If planeEnabled
+    If *PlaneFrame = 0
+      WallSetError("Wall visibility plane chronology requires a caller-owned PlaneFrame.")
+      ProcedureReturn #False
+    EndIf
+    If projectionHeight <> #PROJ_VIEWHEIGHT
+      WallSetError("Wall visibility plane chronology requires the canonical 320x200 full-detail projection; got height " +
+                   Str(projectionHeight) + ".")
+      ProcedureReturn #False
+    EndIf
+    If *Flats = 0 Or *Flats\Magic <> #FLAT_CatalogMagic
+      WallSetError("Wall visibility plane chronology requires a decoded FlatCatalog.")
+      ProcedureReturn #False
+    EndIf
+    If *Textures = 0 Or *Textures\Magic <> #TEXTURE_CatalogMagic
+      WallSetError("Wall visibility plane chronology requires a decoded TextureCatalog for exact tier/mark identity.")
+      ProcedureReturn #False
+    EndIf
   EndIf
 
   nodeCount = *Level\Nodes\Count
@@ -1577,6 +1416,47 @@ Procedure.i WallVisibilityBuild(*Level.MapLevel, *Camera.BspCamera,
     EndIf
   EndIf
 
+  ; Optional M4-01 plane chronology: the frame/tables begin after all map-level
+  ; structural gates, while the transferred WAD is still open for later resource
+  ; binding. Failure here skips the walk and runs the shared cleanup path.
+  If planeEnabled And failure = 0
+    If PlaneResolveSkyFlat(*Flats, @skyFlatIndex) = #False
+      failureText = "Wall visibility plane sky identity failed: " + PlanesLastError()
+      failure = 1
+    EndIf
+  EndIf
+  If planeEnabled And failure = 0
+    If PlaneFrameBegin(*PlaneFrame, *Projection, cameraX, cameraY, heading,
+                       ViewZFixed, skyFlatIndex) = #False
+      failureText = "Wall visibility plane frame begin failed: " + PlanesLastError()
+      failure = 1
+    Else
+      planeFrameStarted = #True
+    EndIf
+  EndIf
+  If planeEnabled And failure = 0 And *Timeline <> 0
+    If PlaneTimelineBegin(*Timeline) = #False
+      failureText = "Wall visibility plane timeline begin failed: " + PlanesLastError()
+      failure = 1
+    Else
+      timelineStarted = #True
+    EndIf
+  EndIf
+  If planeEnabled And failure = 0
+    If WallVerticalClipBegin(@planeClip) = #False
+      failureText = "Wall visibility plane chronological clip begin failed: " + WallDrawLastError()
+      failure = 1
+    Else
+      planeClipStarted = #True
+    EndIf
+  EndIf
+  If planeEnabled And failure = 0
+    If PlaneFillTallyReset(@planeTally) = #False
+      failureText = "Wall visibility plane fill tally initialization failed: " + PlaneFillLastError()
+      failure = 1
+    EndIf
+  EndIf
+
   While failure = 0 And stackPointer > 0
     stackPointer - 1
     *stack = stackMemory + stackPointer * SizeOf(WallWorkItem)
@@ -1630,6 +1510,40 @@ Procedure.i WallVisibilityBuild(*Level.MapLevel, *Camera.BspCamera,
         EndIf
         visitedSubsectors + 1
 
+        floorPlane = -1
+        ceilingPlane = -1
+        floorSky = 0
+        ceilingSky = 0
+        leafEmittedSpans = 0
+        If planeEnabled
+          If PlaneSubsectorPrepare(*PlaneFrame, *Level, *Flats, derivedSector,
+                                   skyFlatIndex, ViewZFixed,
+                                   @floorPlane, @ceilingPlane) = #False
+            failureText = "Plane R_Subsector entry failed for subsector " + Str(leafIndex) +
+                          ": " + PlanesLastError()
+            failure = 1
+          Else
+            ceilingHandle = ceilingPlane
+            floorHandle = floorPlane
+            If floorPlane >= 0
+              If PlaneRecordGet(*PlaneFrame, floorPlane, 0, 0, 0,
+                                @recordSky, 0, 0) = #False
+                failureText = "Plane floor record identity access failed: " + PlanesLastError()
+                failure = 1
+              EndIf
+              floorSky = Bool(recordSky <> 0)
+            EndIf
+            If ceilingPlane >= 0 And failure = 0
+              If PlaneRecordGet(*PlaneFrame, ceilingPlane, 0, 0, 0,
+                                @recordSky, 0, 0) = #False
+                failureText = "Plane ceiling record identity access failed: " + PlanesLastError()
+                failure = 1
+              EndIf
+              ceilingSky = Bool(recordSky <> 0)
+            EndIf
+          EndIf
+        EndIf
+
         segIndex = firstSeg
         While failure = 0 And segIndex <= lastSeg
           clipCountBefore = clip\SpanCount
@@ -1648,6 +1562,78 @@ Procedure.i WallVisibilityBuild(*Level.MapLevel, *Camera.BspCamera,
             Continue
           EndIf
           emittedFragments + segEmitted
+
+          ; M4-01 plane chronology per emitted ClipSpan: after the exact R_AddLine
+          ; clip side effects, build the accepted wall plan once, then CheckPlane
+          ; and mark rows before this span's clip mutations. No pixels/textures.
+          If planeEnabled And failure = 0
+            leafEmittedSpans + segEmitted
+            For fillIndex = clipCountBefore To clipCountAfter - 1
+              *clipSpan = clip\Spans + Int(fillIndex) * SizeOf(ClipSpan)
+              fillSpan\Subsector = *clipSpan\Subsector
+              fillSpan\Seg = *clipSpan\Seg
+              fillSpan\Linedef = *clipSpan\Linedef
+              fillSpan\Side = *clipSpan\Side
+              fillSpan\FrontSector = *clipSpan\FrontSector
+              fillSpan\BackSector = *clipSpan\BackSector
+              fillSpan\FirstX = *clipSpan\FirstX
+              fillSpan\LastX = *clipSpan\LastX
+              fillSpan\Kind = *clipSpan\Kind
+              If WallProjectSpanChecked(*Level, *Flats, *Textures,
+                                        *Projection,
+                                        cameraX, cameraY, heading, ViewZFixed,
+                                        fillIndex, @fillSpan, @plan) = #False
+                failureText = "Plane chronology span " + Str(fillIndex) +
+                              " projection failed at seg " + Str(segIndex) + ": " + WallProjectLastError()
+                failure = 1
+                Break
+              EndIf
+              ceilingBefore = ceilingHandle
+              floorBefore = floorHandle
+              tallyPcBefore = planeTally\ProcessedColumns
+              tallyCcBefore = planeTally\CeilingChecks
+              tallyFcBefore = planeTally\FloorChecks
+              tallyCmBefore = planeTally\CeilingMerges
+              tallyCsBefore = planeTally\CeilingSplits
+              tallyFmBefore = planeTally\FloorMerges
+              tallyFsBefore = planeTally\FloorSplits
+              tallyCbBefore = planeTally\CeilingBands
+              tallyFbBefore = planeTally\FloorBands
+              If PlaneFillSpan(*PlaneFrame, @plan, @ceilingHandle, @floorHandle,
+                               @planeClip, @planeTally) = #False
+                failureText = "Plane chronology span " + Str(fillIndex) +
+                              " dry fill failed at seg " + Str(segIndex) + ": " + PlaneFillLastError()
+                failure = 1
+                Break
+              EndIf
+
+              If *Timeline <> 0 And timelineStarted
+                deltaPc = planeTally\ProcessedColumns - tallyPcBefore
+                deltaCc = planeTally\CeilingChecks - tallyCcBefore
+                deltaFc = planeTally\FloorChecks - tallyFcBefore
+                deltaCm = planeTally\CeilingMerges - tallyCmBefore
+                deltaCs = planeTally\CeilingSplits - tallyCsBefore
+                deltaFm = planeTally\FloorMerges - tallyFmBefore
+                deltaFs = planeTally\FloorSplits - tallyFsBefore
+                deltaCb = planeTally\CeilingBands - tallyCbBefore
+                deltaFb = planeTally\FloorBands - tallyFbBefore
+                If PlaneTimelineAddEvent(*Timeline, fillSpan\Subsector,
+                                         fillSpan\Seg, plan\FirstX, plan\LastX,
+                                         plan\Kind, Bool(plan\MarkCeiling),
+                                         Bool(plan\MarkFloor),
+                                         ceilingBefore, ceilingHandle,
+                                         floorBefore, floorHandle,
+                                         Bool(deltaCm <> 0), Bool(deltaCs <> 0),
+                                         Bool(deltaFm <> 0), Bool(deltaFs <> 0),
+                                         deltaCb, deltaFb, deltaPc, 0) = #False
+                  failureText = "Plane chronology timeline event failed: " + PlanesLastError()
+                  failure = 1
+                  Break
+                EndIf
+              EndIf
+            Next
+          EndIf
+
           Select segOutcome
             Case #WALLLINE_EmptySkip
               emptyLineRejects + 1
@@ -1674,6 +1660,20 @@ Procedure.i WallVisibilityBuild(*Level.MapLevel, *Camera.BspCamera,
           EndIf
           segIndex + 1
         Wend
+        If failure = 0
+          floorEligible = Bool(floorPlane >= 0)
+          ceilingEligible = Bool(ceilingPlane >= 0)
+          If planeEnabled And *Timeline <> 0 And timelineStarted
+            If PlaneTimelineAddVisit(*Timeline, leafIndex, derivedSector,
+                                     floorEligible, ceilingEligible,
+                                     floorPlane, ceilingPlane, floorSky, ceilingSky,
+                                     numSegs, leafEmittedSpans) = #False
+              failureText = "Plane chronology subsector visit failed for " + Str(leafIndex) +
+                            ": " + PlanesLastError()
+              failure = 1
+            EndIf
+          EndIf
+        EndIf
         If failure = 0
           ; Leaf visit completed; remaining work continues in chronology.
         Else
@@ -1925,7 +1925,16 @@ Procedure.i WallVisibilityBuild(*Level.MapLevel, *Camera.BspCamera,
   If stackMemory <> 0
     FreeMemory(stackMemory)
   EndIf
+  If planeClipStarted
+    WallVerticalClipReset(@planeClip)
+  EndIf
   If failure <> 0
+    If timelineStarted
+      PlaneTimelineReset(*Timeline)
+    EndIf
+    If planeFrameStarted
+      PlaneFrameReset(*PlaneFrame)
+    EndIf
     savedFailureText = failureText
     If savedFailureText = ""
       savedFailureText = gWall_LastError

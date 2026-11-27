@@ -98,7 +98,8 @@ XIncludeFile "../Graphics/Flat.pbi"
 XIncludeFile "../Graphics/TextureDefs.pbi"
 XIncludeFile "Geometry.pbi"
 XIncludeFile "Projection.pbi"
-XIncludeFile "WallVisibility.pbi"
+XIncludeFile "WallSpanDefs.pbi"
+XIncludeFile "WallIdentity.pbi"
 
 ; Original r_segs.c R_RenderSegLoop interpolation constants.
 #WALLPROJ_HeightBits = 12
@@ -1211,12 +1212,12 @@ Procedure.i WallProjectSpanChecked(*Level.MapLevel, *Flats.FlatCatalog,
     sameLight = Bool(backLight = frontLight)
     If WallSectorFlatIdentity(*Level, *Flats, spanFront, spanBack, 0,
                               @sameFloor) = #False
-      WallProjectSetError("WallSpan projection floor flat identity failed: " + WallVisibilityLastError())
+      WallProjectSetError("WallSpan projection floor flat identity failed: " + WallIdentityLastError())
       ProcedureReturn #False
     EndIf
     If WallSectorFlatIdentity(*Level, *Flats, spanFront, spanBack, 1,
                               @sameCeiling) = #False
-      WallProjectSetError("WallSpan projection ceiling flat identity failed: " + WallVisibilityLastError())
+      WallProjectSetError("WallSpan projection ceiling flat identity failed: " + WallIdentityLastError())
       ProcedureReturn #False
     EndIf
     markFloor = Bool(*Plan\WorldLowRaw <> *Plan\WorldBottomRaw Or

@@ -60,11 +60,9 @@ CompilerIf Defined(DOOMPB_CLIPSEGS_PBI, #PB_Constant) = 0
 
 #DOOMPB_CLIPSEGS_PBI = 1
 
-#CLIP_Magic = $434C5031
+XIncludeFile "WallSpanDefs.pbi"
 
-; Wall classification for published spans (not a drawing request).
-#WALL_KIND_SOLID = 0
-#WALL_KIND_PASS = 1
+#CLIP_Magic = $434C5031
 
 ; Exact sentinel bounds from R_ClearClipSegs.
 #CLIP_SentinelMinFirst = -2147483647

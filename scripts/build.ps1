@@ -23,6 +23,10 @@
     synthetic integration), -M3ReleaseIwadTest (optional RI04 owner-IWAD
     release integration) and -M3ReleaseBenchmark (BEN01 wall-only frame timing).
 
+    M4-01 visplane/real-flat variant targets are -PlaneTest (PL01-PL60 unit
+    suite), -PlaneIntegrationTest (PI01-PI03 synthetic combined frames) and
+    -PlaneIwadTest (optional PI04 owner-IWAD combined walls+flats).
+
 .PARAMETER Check
     Run only the PureBasic syntax check; no executable is produced.
 
@@ -138,6 +142,18 @@
     Build the optional M3-06 real-IWAD textured wall integration program
     (tests/integration/m3_wall_texture_iwad_tests.pb) instead of the main executable.
 
+.PARAMETER PlaneTest
+    Build the M4-01 visplane/flat/zlight unit test program
+    (tests/unit/plane_render_tests.pb) instead of the main executable.
+
+.PARAMETER PlaneIntegrationTest
+    Build the M4-01 synthetic combined wall+flat integration test program
+    (tests/integration/m4_plane_tests.pb) instead of the main executable.
+
+.PARAMETER PlaneIwadTest
+    Build the optional M4-01 real-IWAD combined walls+flats integration test
+    program (tests/integration/m4_plane_iwad_tests.pb) instead of the main executable.
+
 .PARAMETER CompilerPath
     Explicit path (or command name) of pbcompiler. Overrides PB_COMPILER and
     automatic discovery.
@@ -230,6 +246,15 @@
     ./scripts/build.ps1 -WallTextureIwadTest
 
 .EXAMPLE
+    ./scripts/build.ps1 -PlaneTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -PlaneIntegrationTest
+
+.EXAMPLE
+    ./scripts/build.ps1 -PlaneIwadTest
+
+.EXAMPLE
     ./scripts/build.ps1 -M3ReleaseTest
 
 .EXAMPLE
@@ -269,6 +294,9 @@ param(
     [switch]$WallTextureTest,
     [switch]$WallTextureIntegrationTest,
     [switch]$WallTextureIwadTest,
+    [switch]$PlaneTest,
+    [switch]$PlaneIntegrationTest,
+    [switch]$PlaneIwadTest,
     [switch]$M3ReleaseTest,
     [switch]$M3ReleaseIwadTest,
     [switch]$M3ReleaseBenchmark,
@@ -310,6 +338,9 @@ if ($WallRenderIwadTest) { $selectedTargets++ }
 if ($WallTextureTest) { $selectedTargets++ }
 if ($WallTextureIntegrationTest) { $selectedTargets++ }
 if ($WallTextureIwadTest) { $selectedTargets++ }
+if ($PlaneTest) { $selectedTargets++ }
+if ($PlaneIntegrationTest) { $selectedTargets++ }
+if ($PlaneIwadTest) { $selectedTargets++ }
 if ($M3ReleaseTest) { $selectedTargets++ }
 if ($M3ReleaseIwadTest) { $selectedTargets++ }
 if ($M3ReleaseBenchmark) { $selectedTargets++ }
@@ -318,7 +349,16 @@ if ($selectedTargets -gt 1) {
     exit 1
 }
 
-if ($M3ReleaseTest) {
+if ($PlaneIwadTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m4_plane_iwad_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M4PlaneIwadTests.exe'
+} elseif ($PlaneIntegrationTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\integration\m4_plane_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-M4PlaneTests.exe'
+} elseif ($PlaneTest) {
+    $sourceFile = Join-Path $repoRoot 'tests\unit\plane_render_tests.pb'
+    $outputFile = Join-Path $buildDir 'DoomPB-PlaneRenderTests.exe'
+} elseif ($M3ReleaseTest) {
     $sourceFile = Join-Path $repoRoot 'tests\integration\m3_release_tests.pb'
     $outputFile = Join-Path $buildDir 'DoomPB-M3ReleaseTests.exe'
 } elseif ($M3ReleaseIwadTest) {

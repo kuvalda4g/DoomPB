@@ -134,7 +134,8 @@ Procedure.i WallTextureDrawColumn(*FrameBuffer.FrameBuffer,
                                   TextureMid.l, IScale.l,
                                   LightNum.l, ScaleIndex.l,
                                   *PixelCount.Long, *Samples.Long,
-                                  *Uncovered.Long, *ShortFallbacks.Long)
+                                  *Uncovered.Long, *ShortFallbacks.Long,
+                                   *Coverage.Byte = 0)
   Protected wrapped.l = 0
   Protected frac.l = 0
   Protected row.l
@@ -233,6 +234,9 @@ Procedure.i WallTextureDrawColumn(*FrameBuffer.FrameBuffer,
       ProcedureReturn #WALLTEXDRAW_RangeError
     EndIf
     PokeA(*FrameBuffer\Pixels + planeOffset, mappedIndex)
+    If *Coverage <> 0
+      PokeA(*Coverage + planeOffset, 1)
+    EndIf
     localSamples + 1
     If opaque = 0
       localUncovered + 1
@@ -277,7 +281,8 @@ Procedure.i TexturedWallDrawSpan(*FrameBuffer.FrameBuffer,
                                  *Table.WallScalelightTable,
                                  *Colormap.ColormapSet,
                                  *Clip.WallVerticalClip,
-                                 *Tally.WallTextureDrawTally)
+                                 *Tally.WallTextureDrawTally,
+                                  *Coverage.Byte = 0)
   Protected firstX.l
   Protected lastX.l
   Protected column.l
@@ -485,7 +490,7 @@ Procedure.i TexturedWallDrawSpan(*FrameBuffer.FrameBuffer,
                                            *TexturePlan\MidTextureMid, iScale,
                                            *TexturePlan\LightNum, scaleIndex,
                                            @pixelCount, @samples, @uncovered,
-                                           @fallbacks)
+                                           @fallbacks, *Coverage)
       If rangeOutcome = #WALLTEXDRAW_RangeError
         ProcedureReturn #False
       ElseIf rangeOutcome = #WALLTEXDRAW_RangeOutOfFrame
@@ -523,7 +528,7 @@ Procedure.i TexturedWallDrawSpan(*FrameBuffer.FrameBuffer,
                                                *TexturePlan\TopTextureMid, iScale,
                                                *TexturePlan\LightNum, scaleIndex,
                                                @pixelCount, @samples, @uncovered,
-                                               @fallbacks)
+                                               @fallbacks, *Coverage)
           If rangeOutcome = #WALLTEXDRAW_RangeError
             ProcedureReturn #False
           ElseIf rangeOutcome = #WALLTEXDRAW_RangeOutOfFrame
@@ -564,7 +569,7 @@ Procedure.i TexturedWallDrawSpan(*FrameBuffer.FrameBuffer,
                                                *TexturePlan\BottomTextureMid, iScale,
                                                *TexturePlan\LightNum, scaleIndex,
                                                @pixelCount, @samples, @uncovered,
-                                               @fallbacks)
+                                               @fallbacks, *Coverage)
           If rangeOutcome = #WALLTEXDRAW_RangeError
             ProcedureReturn #False
           ElseIf rangeOutcome = #WALLTEXDRAW_RangeOutOfFrame

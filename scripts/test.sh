@@ -18,13 +18,15 @@
 # textured wall-column/vanilla-lighting unit WT01-WT60, its synthetic texture/
 # COLORMAP integration TI01-TI03 and optional real-IWAD textured TI04, M3-07
 # synthetic release integration MR01-MR36 and RI01-RI03, optional real-IWAD
-# release integration RI04, BEN01 wall-only frame timing, and smoke tests
+# release integration RI04, BEN01 wall-only frame timing, M4-01 visplane/
+# real-flat unit PL01-PL60, its synthetic combined wall+flat integration
+# PI01-PI03 and optional real-IWAD combined walls+flats PI04, and smoke tests
 # against the produced executable: --version, --help, no-argument startup,
 # unknown-option handling, --lump-info argument validation and nonblocking
 # --show-title failures. No commercial game data and no display are needed for
 # the synthetic suite. When IWAD_PATH points at an owner-owned legal IWAD,
-# optional M3-03 I04, M3-04 I04, M3-05 WI04, M3-06 TI04, M3-07 RI04 and
-# --map-info CLI checks additionally run read-only.
+# optional M3-03 I04, M3-04 I04, M3-05 WI04, M3-06 TI04, M3-07 RI04, M4-01 PI04
+# and --map-info CLI checks additionally run read-only.
 #
 # Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -63,6 +65,9 @@ WALL_RENDER_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallRenderIwadTests"
 WALL_TEXTURE_TEST_BIN="${REPO_ROOT}/build/DoomPB-WallTextureTests"
 WALL_TEXTURE_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallTextureTests"
 WALL_TEXTURE_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3WallTextureIwadTests"
+PLANE_TEST_BIN="${REPO_ROOT}/build/DoomPB-PlaneRenderTests"
+PLANE_INTEGRATION_TEST_BIN="${REPO_ROOT}/build/DoomPB-M4PlaneTests"
+PLANE_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M4PlaneIwadTests"
 M3_RELEASE_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3ReleaseTests"
 M3_RELEASE_IWAD_TEST_BIN="${REPO_ROOT}/build/DoomPB-M3ReleaseIwadTests"
 M3_RELEASE_BENCHMARK_BIN="${REPO_ROOT}/build/DoomPB-M3ReleaseBenchmark"
@@ -2131,6 +2136,274 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+printf '\n== M4-01 visplane/real-flat unit test build ==\n'
+run_build --check --plane-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M4-01 plane unit test syntax check exits with 0\n'
+else
+    printf 'FAIL: M4-01 plane unit test syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M4-01 plane unit test syntax check failed.\n' >&2
+    exit 1
+fi
+run_build --plane-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M4-01 plane unit test build exits with 0\n'
+else
+    printf 'FAIL: M4-01 plane unit test build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M4-01 plane unit test build failed.\n' >&2
+    exit 1
+fi
+CHECKS=$((CHECKS + 1))
+if [ -f "${PLANE_TEST_BIN}" ]; then
+    printf 'PASS: M4-01 plane unit test output exists: %s\n' "${PLANE_TEST_BIN}"
+else
+    printf 'FAIL: M4-01 plane unit test output missing: %s\n' "${PLANE_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M4-01 plane unit test output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M4-01 visplane/real-flat unit tests (PL01-PL60) ==\n'
+plane_unit_output="$("${PLANE_TEST_BIN}" 2>&1)"
+plane_unit_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${plane_unit_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M4-01 plane unit tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M4-01 plane unit tests exit with %s\n' "${plane_unit_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${plane_unit_output}" | grep -Eq -- '^RESULT: PASS'; then
+    printf 'PASS: M4-01 PL01-PL60 reports PASS\n'
+else
+    printf 'FAIL: M4-01 plane unit suite did not report PASS\n%s\n' "${plane_unit_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${plane_unit_output}" | grep -q -- 'Cases: 60, assertions: 211, failures: 0'; then
+    printf 'PASS: M4-01 unit suite runs 60 cases/211 assertions/0 failures\n'
+else
+    printf 'FAIL: M4-01 plane unit case/assertion totals differ\n%s\n' "${plane_unit_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+for marker in 'CASE PL01:' 'CASE PL60:'; do
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${plane_unit_output}" | grep -q -- "${marker}"; then
+        printf 'PASS: M4-01 unit suite actually executed %s\n' "${marker}"
+    else
+        printf 'FAIL: M4-01 plane unit execution marker %s missing\n%s\n' "${marker}" "${plane_unit_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+done
+
+printf '\n== M4-01 synthetic combined wall+flat integration build ==\n'
+run_build --check --plane-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M4-01 synthetic plane integration syntax check exits with 0\n'
+else
+    printf 'FAIL: M4-01 synthetic plane integration syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M4-01 synthetic plane integration syntax check failed.\n' >&2
+    exit 1
+fi
+run_build --plane-integration-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M4-01 synthetic plane integration build exits with 0\n'
+else
+    printf 'FAIL: M4-01 synthetic plane integration build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M4-01 synthetic plane integration build failed.\n' >&2
+    exit 1
+fi
+CHECKS=$((CHECKS + 1))
+if [ -f "${PLANE_INTEGRATION_TEST_BIN}" ]; then
+    printf 'PASS: M4-01 synthetic plane integration output exists: %s\n' "${PLANE_INTEGRATION_TEST_BIN}"
+else
+    printf 'FAIL: M4-01 synthetic plane integration output missing: %s\n' "${PLANE_INTEGRATION_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M4-01 synthetic plane integration output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M4-01 synthetic combined wall+flat integration tests (PI01-PI03) ==\n'
+plane_integration_output="$("${PLANE_INTEGRATION_TEST_BIN}" 2>&1)"
+plane_integration_status=$?
+CHECKS=$((CHECKS + 1))
+if [ "${plane_integration_status}" -eq 0 ]; then
+    printf 'PASS: synthetic M4-01 plane integration tests exit with 0\n'
+else
+    printf 'FAIL: synthetic M4-01 plane integration tests exit with %s\n' "${plane_integration_status}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${plane_integration_output}" | grep -Eq -- '^RESULT: PASS'; then
+    printf 'PASS: M4-01 PI01-PI03 reports PASS\n'
+else
+    printf 'FAIL: M4-01 synthetic plane integration did not report PASS\n%s\n' "${plane_integration_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${plane_integration_output}" | grep -q -- 'Cases: 3, assertions: 76, failures: 0'; then
+    printf 'PASS: M4-01 synthetic integration runs 3 cases/76 assertions/0 failures\n'
+else
+    printf 'FAIL: M4-01 synthetic integration case/assertion totals differ\n%s\n' "${plane_integration_output}" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+for marker in 'CASE PI01:' 'CASE PI02:' 'CASE PI03:'; do
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${plane_integration_output}" | grep -q -- "${marker}"; then
+        printf 'PASS: M4-01 synthetic integration actually executed %s\n' "${marker}"
+    else
+        printf 'FAIL: M4-01 synthetic integration execution marker %s missing\n%s\n' "${marker}" "${plane_integration_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+done
+
+printf '\n== M4-01 optional IWAD combined walls+flats integration build ==\n'
+run_build --check --plane-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M4-01 optional IWAD plane integration syntax check exits with 0\n'
+else
+    printf 'FAIL: M4-01 optional IWAD plane integration syntax check exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M4-01 optional IWAD plane integration syntax check failed.\n' >&2
+    exit 1
+fi
+run_build --plane-iwad-test
+CHECKS=$((CHECKS + 1))
+if [ "${LAST_STATUS}" -eq 0 ]; then
+    printf 'PASS: M4-01 optional IWAD plane integration build exits with 0\n'
+else
+    printf 'FAIL: M4-01 optional IWAD plane integration build exits with %s\n' "${LAST_STATUS}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M4-01 optional IWAD plane integration build failed.\n' >&2
+    exit 1
+fi
+CHECKS=$((CHECKS + 1))
+if [ -f "${PLANE_IWAD_TEST_BIN}" ]; then
+    printf 'PASS: M4-01 optional IWAD plane integration output exists: %s\n' "${PLANE_IWAD_TEST_BIN}"
+else
+    printf 'FAIL: M4-01 optional IWAD plane integration output missing: %s\n' "${PLANE_IWAD_TEST_BIN}" >&2
+    FAILURES=$((FAILURES + 1))
+    printf 'Aborting: M4-01 optional IWAD plane integration output missing.\n' >&2
+    exit 1
+fi
+
+printf '\n== M4-01 optional IWAD combined walls+flats tests (PI04) ==\n'
+if [ -z "${IWAD_PATH}" ]; then
+    plane_iwad_output="$("${PLANE_IWAD_TEST_BIN}" 2>&1)"
+    plane_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${plane_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional M4-01 PI04 tests exit with 0 without a WAD path\n'
+    else
+        printf 'FAIL: optional M4-01 PI04 tests exit with %s\n' "${plane_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${plane_iwad_output}" | grep -q -- 'NOT RUN'; then
+        printf 'PASS: optional M4-01 PI04 tests report NOT RUN without a path\n'
+    else
+        printf 'FAIL: optional M4-01 PI04 tests did not report NOT RUN\n%s\n' "${plane_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${plane_iwad_output}" | grep -q -- 'Cases: 0, assertions: 0, failures: 0'; then
+        printf 'PASS: optional M4-01 PI04 no-argument mode is clean\n'
+    else
+        printf 'FAIL: optional M4-01 PI04 no-argument totals differ\n%s\n' "${plane_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+else
+    CHECKS=$((CHECKS + 1))
+    if [ -f "${IWAD_PATH}" ]; then
+        printf 'PASS: explicit owner IWAD path exists for M4-01\n'
+    else
+        printf 'FAIL: explicit owner IWAD path does not exist for M4-01\n' >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    plane_iwad_output="$("${PLANE_IWAD_TEST_BIN}" "${IWAD_PATH}" 2>&1)"
+    plane_iwad_status=$?
+    CHECKS=$((CHECKS + 1))
+    if [ "${plane_iwad_status}" -eq 0 ]; then
+        printf 'PASS: optional M4-01 PI04 E1M1/E1M2/E4M1 integration exits with 0\n'
+    else
+        printf 'FAIL: optional M4-01 PI04 integration exits with %s\n' "${plane_iwad_status}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${plane_iwad_output}" | grep -Eq -- '^RESULT: PASS'; then
+        printf 'PASS: optional M4-01 PI04 reports PASS\n'
+    else
+        printf 'FAIL: optional M4-01 PI04 did not report PASS\n%s\n' "${plane_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${plane_iwad_output}" | grep -q -- 'Cases: 1, assertions: 150, failures: 0'; then
+        printf 'PASS: M4-01 PI04 runs 1 case/150 assertions/0 failures\n'
+    else
+        printf 'FAIL: M4-01 PI04 case/assertion totals differ\n%s\n' "${plane_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${plane_iwad_output}" | grep -Eq -- 'matches known Ultimate Doom 1\.9ud identification 1'; then
+        printf 'PASS: M4-01 PI04 observed the known owner IWAD identity\n'
+    else
+        printf 'FAIL: M4-01 PI04 known owner IWAD identity disclosure missing\n%s\n' "${plane_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    for map_name in E1M1 E1M2 E4M1; do
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${plane_iwad_output}" |
+            grep -q -- "${map_name} new combined wall+flat frame #1 succeeds"; then
+            printf 'PASS: optional M4-01 actually rendered %s combined frame\n' "${map_name}"
+        else
+            printf 'FAIL: optional M4-01 %s combined frame measurement missing\n%s\n' "${map_name}" "${plane_iwad_output}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${plane_iwad_output}" |
+            grep -q -- "${map_name} frozen M3-05 debug frame hash"; then
+            printf 'PASS: optional M4-01 %s frozen M3-05 debug hash preserved\n' "${map_name}"
+        else
+            printf 'FAIL: optional M4-01 %s M3-05 debug preservation missing\n%s\n' "${map_name}" "${plane_iwad_output}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
+    for map_name in E1M1 E1M2; do
+        CHECKS=$((CHECKS + 1))
+        if printf '%s\n' "${plane_iwad_output}" |
+            grep -q -- "${map_name} real FlatLoad 64x64 floor/ceiling pixels present"; then
+            printf 'PASS: optional M4-01 %s real flats visibly present\n' "${map_name}"
+        else
+            printf 'FAIL: optional M4-01 %s real flat pixel evidence missing\n%s\n' "${map_name}" "${plane_iwad_output}" >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${plane_iwad_output}" | grep -q -- 'repeat combined full 64,000-byte frame identical'; then
+        printf 'PASS: optional M4-01 combined frames repeat byte-for-byte\n'
+    else
+        printf 'FAIL: optional M4-01 combined repeat measurement missing\n%s\n' "${plane_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+    if printf '%s\n' "${plane_iwad_output}" | grep -Eq -- 'owner IWAD MD5 fingerprint unchanged after read-only pass'; then
+        printf 'PASS: optional M4-01 owner IWAD read-only MD5 unchanged\n'
+    else
+        printf 'FAIL: optional M4-01 owner IWAD unchanged verification missing\n%s\n' "${plane_iwad_output}" >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+fi
+
 printf '\n== Smoke tests ==\n'
 
 check_case '--version exits with 0 and prints DoomPB 0.3.0' 0 '^DoomPB 0\.3\.0$' --version
@@ -2148,6 +2421,14 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+CHECKS=$((CHECKS + 1))
+if printf '%s\n' "${help_output}" | grep -q -- '--show-planes'; then
+    printf 'PASS: --help documents the M4-01 --show-planes preview\n'
+else
+    printf 'FAIL: --help does not document --show-planes\n' >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
 check_case 'startup without arguments exits with 0' 0 'not implemented'
 check_case 'unknown option exits with 2' 2 'unknown option' --definitely-not-an-option
 check_case 'too many arguments exits with 2' 2 '' --version extra
@@ -2157,6 +2438,12 @@ check_case '--dump-info with --lump-info exits with 2' 2 '' --dump-info --lump-i
 check_case '--show-title without --iwad exits with 2' 2 '' --show-title
 check_case 'missing WAD for --show-title exits with 1' 1 '' --iwad definitely-missing-doompb.wad --show-title
 check_case '--dump-info with --show-title exits with 2' 2 '' --dump-info --show-title
+check_case '--show-planes without --iwad exits with 2' 2 'requires' --show-planes
+check_case '--show-planes without a map name exits with 2' 2 'requires a map name' --iwad definitely-missing-doompb.wad --show-planes
+check_case 'missing WAD for --show-planes exits with 1' 1 'Cannot open WAD' --iwad definitely-missing-doompb.wad --show-planes E1M1
+check_case '--show-planes with --show-walls exits with 2' 2 'may be used' --show-planes E1M1 --show-walls E1M1
+check_case 'duplicate --show-planes exits with 2' 2 'duplicate' --show-planes E1M1 --show-planes E1M2
+check_case 'extra --show-planes argument exits with 2' 2 'unknown option' --show-planes E1M1 extra
 
 if [ -n "${IWAD_PATH}" ] && [ -f "${IWAD_PATH}" ]; then
     printf '\n== Optional IWAD CLI map-info regression ==\n'

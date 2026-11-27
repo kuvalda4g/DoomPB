@@ -3,6 +3,72 @@
 All notable changes to DoomPB are recorded here. The project is licensed under
 GPL-2.0-only; commercial Doom game data is never included.
 
+## [Unreleased] — M4-01 visplanes + real flats (partial M4)
+
+M4-01 adds the first M4 slice in the existing online M3 pipeline while application
+version `0.3.0` and prior M1/M2/M3 APIs/outputs stay intact. It collects online
+visplanes at subsector entry (`R_FindPlane`), checks/widens/splits emitted spans
+(`R_CheckPlane`), marks floor/ceiling bands before clip mutation, builds spans and
+draws real 64x64 `FlatLoad` floors/ceilings after the textured wall pass using
+source-formula `R_MapPlane`/`R_DrawSpan`, `zlight[16][128]` and `COLORMAP`.
+`F_SKY1` is recognized/normalized/deferred with band/pixel counts and never loaded
+or drawn as a flat. The opt-in `--show-planes <ExMy>` preview combines walls,
+floors/ceilings and deferred sky background at 3x for E1M1/E1M2/E4M1.
+
+### Added
+
+- `src/Renderer/Planes.pbi`: visplane frame, source-order Find/CheckPlane, 322-
+  column top/bottom boards, pre-clip MarkCeiling/MarkFloor, subsector eligibility,
+  sky resolution, timeline visits.
+- `src/Renderer/PlaneFill.pbi`, `PlaneDraw.pbi`: exact MakeSpans open/close order
+  with sentinels, bounded row-span trace, 16.16 row cache and inclusive span draw.
+- `src/Renderer/PlaneMapping.pbi`, `PlaneFlatCache.pbi`: yslope/distscale/base
+  scales, checked planeheight/light row, 16x128 zlight map indexes, used-only
+  owning flat image cache.
+- `src/Renderer/PlaneRenderMain.pbi`: transactional combined wall+flat frame,
+  explicit 0/1 64,000-byte coverage audit, owned private frame discarded on error,
+  optional span trace, counters and FNV result.
+- `--show-planes` CLI wiring plus `DoomPB - Textured Walls + Flats` window title.
+- `scripts/gen_plane_golden.py` independent integer oracle → tracked synthetic
+  fixture `tests/fixtures/m4_plane_golden.pbi`; P02 synthetic map builder.
+- `tests/unit/plane_render_tests.pb` PL01–PL60, `tests/integration/m4_plane_tests.pb`
+  PI01–PI03, optional `tests/integration/m4_plane_iwad_tests.pb` PI04; wired
+  `-PlaneTest`/`-PlaneIntegrationTest`/`-PlaneIwadTest` and Bash equivalents.
+
+### Verified (Windows x64, PureBasic 6.41)
+
+- PL01–PL60: 60 cases, 211 assertions, 0 failures.
+- PI01–PI03: 3 cases, 76 assertions, 0 failures; full synthetic frame hashes
+  `59E2505D8A6CAD85` (PI01) and `CE2C4D994F5EDF3A` (PI02) match the independent
+  oracle byte-for-byte; legacy M3-06 synthetic hash preserved.
+- PI04 owner: 1 case, 150 assertions, 0 failures; IWAD 12,408,292 bytes/MD5
+  `c4fe9fd920207691a9f493668e0a2083` read-only unchanged. Combined floor/ceiling/
+  sky counters: E1M1 floor 25695/ceiling 25937/sky 0, E1M2 24660/24982/0, E4M1
+  22644/11516/1191 deferred sky pixels. New combined raw hashes
+  `B6C3BD9880758292`, `D32BD22FF01A9BBB`, `0AFA2E970F9C08C8` are **NOT LOCKED**.
+  Frozen M3-04 span/counter and M3-05 debug hashes preserved; historical M3-06
+  textured hashes unchanged (NOT LOCKED).
+- Full Windows regression scripts run **211/211 checks** without an IWAD and
+  **291/291 checks** with the owner IWAD, both exit 0; seven `--show-planes`
+  CLI smoke cases (13 assertions) pass alongside every prior suite.
+- Real GUI M4-01 previews E1M1/E1M2/E4M1: verified 960x600 client area, clean
+  window close exit 0, and `PrintWindow` client captures visually show real
+  textured floors/ceilings and deferred black `F_SKY1` background with no
+  observed wall overwrite/striping. Screenshots live only in ignored temp
+  storage and are never tracked.
+
+### Known gaps / deviations
+
+- No M4-02 sky pixel texture, sprites, masked-midtexture back-to-front overlay or
+  gameplay; combined preview is a partial M4 development slice.
+- Plane bottom padding cells are `0` (top sentinel `0xFF` unchanged) instead of
+  source-uninitialized values; documented safe test surface.
+- Lower-tier fill clamp uses the pre-column clip snapshot consistent with the
+  frozen M3 wall rasterizer; documented difference from source ordering.
+- Linux x64 runtime **NOT RUN**; Bash scripts are syntax-only under Git Bash.
+- New owner combined hashes are not accepted goldens without independent
+  same-camera source comparison.
+
 ## [0.3.0] - 2026-11-27 (prepared; owner commit/tag pending)
 
 M3-07 closes Windows x64 integration of M3-01 through M3-06 as a truthful

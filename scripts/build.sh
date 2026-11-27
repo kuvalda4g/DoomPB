@@ -46,13 +46,16 @@ WALL_RENDER_IWAD_TEST_BUILD=0
 WALL_TEXTURE_TEST_BUILD=0
 WALL_TEXTURE_INTEGRATION_TEST_BUILD=0
 WALL_TEXTURE_IWAD_TEST_BUILD=0
+PLANE_TEST_BUILD=0
+PLANE_INTEGRATION_TEST_BUILD=0
+PLANE_IWAD_TEST_BUILD=0
 M3_RELEASE_TEST_BUILD=0
 M3_RELEASE_IWAD_TEST_BUILD=0
 M3_RELEASE_BENCHMARK_BUILD=0
 
 usage() {
     cat <<'EOF'
-Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-test | --resource-test | --texture-def-test | --composite-test | --flat-sprite-test | --map-types-test | --map-loader-test | --integration-test | --fixed-test | --fixed-iwad-test | --geometry-test | --geometry-integration-test | --geometry-iwad-test | --bsp-test | --bsp-integration-test | --bsp-iwad-test | --wall-clipping-test | --wall-clipping-integration-test | --wall-clipping-iwad-test | --wall-projection-test | --wall-render-integration-test | --wall-render-iwad-test | --wall-texture-test | --wall-texture-integration-test | --wall-texture-iwad-test | --m3-release-test | --m3-release-iwad-test | --m3-release-benchmark] [--help]
+Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-test | --resource-test | --texture-def-test | --composite-test | --flat-sprite-test | --map-types-test | --map-loader-test | --integration-test | --fixed-test | --fixed-iwad-test | --geometry-test | --geometry-integration-test | --geometry-iwad-test | --bsp-test | --bsp-integration-test | --bsp-iwad-test | --wall-clipping-test | --wall-clipping-integration-test | --wall-clipping-iwad-test | --wall-projection-test | --wall-render-integration-test | --wall-render-iwad-test | --wall-texture-test | --wall-texture-integration-test | --wall-texture-iwad-test | --plane-test | --plane-integration-test | --plane-iwad-test | --m3-release-test | --m3-release-iwad-test | --m3-release-benchmark] [--help]
 
   (no option)   Syntax-check and build build/DoomPB.
   -k, --check   Run the PureBasic syntax check only.
@@ -127,6 +130,15 @@ Usage: build.sh [--check | --test | --lump-test | --graphics-test | --display-te
   --wall-texture-iwad-test
                 Build the optional M3-06 real-IWAD textured wall integration test
                 program TI04 instead.
+  --plane-test
+                Build the M4-01 visplane/flat/zlight unit test program PL01-PL60
+                instead.
+  --plane-integration-test
+                Build the M4-01 synthetic combined wall+flat integration test
+                program PI01-PI03 instead.
+  --plane-iwad-test
+                Build the optional M4-01 real-IWAD combined walls+flats
+                integration test program PI04 instead.
   --m3-release-test
                 Build the M3-07 synthetic release integration test program
                 MR01-MR36 and RI01-RI03 instead.
@@ -268,6 +280,15 @@ while [ $# -gt 0 ]; do
         --wall-texture-iwad-test)
             WALL_TEXTURE_IWAD_TEST_BUILD=1
             ;;
+        --plane-test)
+            PLANE_TEST_BUILD=1
+            ;;
+        --plane-integration-test)
+            PLANE_INTEGRATION_TEST_BUILD=1
+            ;;
+        --plane-iwad-test)
+            PLANE_IWAD_TEST_BUILD=1
+            ;;
         --m3-release-test)
             M3_RELEASE_TEST_BUILD=1
             ;;
@@ -292,9 +313,27 @@ done
 
 [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 
-selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD + DISPLAY_TEST_BUILD + RESOURCE_TEST_BUILD + TEXTURE_DEF_TEST_BUILD + COMPOSITE_TEST_BUILD + FLAT_SPRITE_TEST_BUILD + MAP_TYPES_TEST_BUILD + MAP_LOADER_TEST_BUILD + INTEGRATION_TEST_BUILD + FIXED_TEST_BUILD + FIXED_IWAD_TEST_BUILD + GEOMETRY_TEST_BUILD + GEOMETRY_INTEGRATION_TEST_BUILD + GEOMETRY_IWAD_TEST_BUILD + BSP_TEST_BUILD + BSP_INTEGRATION_TEST_BUILD + BSP_IWAD_TEST_BUILD + WALL_CLIPPING_TEST_BUILD + WALL_CLIPPING_INTEGRATION_TEST_BUILD + WALL_CLIPPING_IWAD_TEST_BUILD + WALL_PROJECTION_TEST_BUILD + WALL_RENDER_INTEGRATION_TEST_BUILD + WALL_RENDER_IWAD_TEST_BUILD + WALL_TEXTURE_TEST_BUILD + WALL_TEXTURE_INTEGRATION_TEST_BUILD + WALL_TEXTURE_IWAD_TEST_BUILD + M3_RELEASE_TEST_BUILD + M3_RELEASE_IWAD_TEST_BUILD + M3_RELEASE_BENCHMARK_BUILD))
+selected_targets=$((TEST_BUILD + LUMP_TEST_BUILD + GRAPHICS_TEST_BUILD + DISPLAY_TEST_BUILD + RESOURCE_TEST_BUILD + TEXTURE_DEF_TEST_BUILD + COMPOSITE_TEST_BUILD + FLAT_SPRITE_TEST_BUILD + MAP_TYPES_TEST_BUILD + MAP_LOADER_TEST_BUILD + INTEGRATION_TEST_BUILD + FIXED_TEST_BUILD + FIXED_IWAD_TEST_BUILD + GEOMETRY_TEST_BUILD + GEOMETRY_INTEGRATION_TEST_BUILD + GEOMETRY_IWAD_TEST_BUILD + BSP_TEST_BUILD + BSP_INTEGRATION_TEST_BUILD + BSP_IWAD_TEST_BUILD + WALL_CLIPPING_TEST_BUILD + WALL_CLIPPING_INTEGRATION_TEST_BUILD + WALL_CLIPPING_IWAD_TEST_BUILD + WALL_PROJECTION_TEST_BUILD + WALL_RENDER_INTEGRATION_TEST_BUILD + WALL_RENDER_IWAD_TEST_BUILD + WALL_TEXTURE_TEST_BUILD + WALL_TEXTURE_INTEGRATION_TEST_BUILD + WALL_TEXTURE_IWAD_TEST_BUILD + PLANE_TEST_BUILD + PLANE_INTEGRATION_TEST_BUILD + PLANE_IWAD_TEST_BUILD + M3_RELEASE_TEST_BUILD + M3_RELEASE_IWAD_TEST_BUILD + M3_RELEASE_BENCHMARK_BUILD))
 if [ "${selected_targets}" -gt 1 ]; then
     fail 'test targets select different programs; choose one.'
+fi
+
+if [ "${PLANE_IWAD_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/integration/m4_plane_iwad_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-M4PlaneIwadTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
+
+if [ "${PLANE_INTEGRATION_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/integration/m4_plane_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-M4PlaneTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
+fi
+
+if [ "${PLANE_TEST_BUILD}" -eq 1 ]; then
+    SOURCE_FILE="${REPO_ROOT}/tests/unit/plane_render_tests.pb"
+    OUTPUT_FILE="${BUILD_DIR}/DoomPB-PlaneRenderTests"
+    [ -f "${SOURCE_FILE}" ] || fail "source file not found: ${SOURCE_FILE}"
 fi
 
 if [ "${M3_RELEASE_TEST_BUILD}" -eq 1 ]; then

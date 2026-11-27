@@ -2219,6 +2219,152 @@ screen X, independent middle/top/bottom clip/stepping, deferred
     and run, not inferred from another language. No WAD/pixels/private paths were
     sent to Context7. Pinned C remained authoritative for Doom formulas.
 
+## M4-01 - online visplanes, real flats and deferred sky (partial M4)
+
+- Scope and production architecture:
+  - The existing M3-04 online near-to-far `WallVisibilityBuild` remains the sole
+    BSP/seg producer. It now performs `R_Subsector`-style plane eligibility at
+    subsector entry (`PlaneSubsectorPrepare` -> `R_FindPlane` per legal floor/
+    ceiling), then for each emitted `ClipSpan` applies `R_CheckPlane` to merge a
+    disjoint interval or split an overlapping used column into a copied plane,
+    fills columns/bands via the pre-column clip snapshot, and records one
+    caller-owned timeline visit. The legacy 6-argument build path and its frozen
+    outputs remain intact; plane/timeline hooks are optional trailing arguments.
+  - `WallTextureDraw` receives an optional coverage mask (0/1 per wall-painted
+    pixel). Without it, old M3-06 bytes/hashes are unchanged; with it, plane
+    drawing aborts on any attempted covered-wall pixel, and the combined
+    orchestrator audits all 64,000 coverage bytes plus nonzero/zero totals.
+  - Chronology is strictly: subsector -> `R_FindPlane`; emitted ClipSpan ->
+    `R_CheckPlane`; `R_MarkCeiling`/`R_MarkFloor` bands before clip mutation;
+    complete textured wall pass; load only used non-sky flats while WAD open;
+    then one post-wall `R_DrawPlanes` (`R_MakeSpans`, `R_MapPlane`, `R_DrawSpan`).
+    A plane draw pixel that overlaps a coverage=1 wall cell is an explicit fatal
+    failure, never a silent overwrite.
+- Original pinned source consulted (upstream `a77dfb96cb91780ca334d0d4cfd86957558007e0`):
+  - `r_plane.c`: `R_FindPlane` exact height/picnum/lightlevel scan and sky
+    `height=0`/`lightlevel=0` normalization, `MAXVISPLANES` cap; `R_CheckPlane`
+    old/new bound interpolation and split-start-first policy; `R_MarkCeiling`
+    `ceilingclip[x]+1`/`yl-1` and `R_MarkFloor` `yh+1`/`floorclip[x]-1`; `R_DrawPlanes`
+    sky skip, planeheight `abs(height-viewz)`, light row, `MAXLIGHTZ` clamp,
+    span open/close calls; `R_DrawSpan` inclusive `[x1,x2]` stepping; plane
+    basex/basey from finecosine/finesine and centerxfrac; `P_MapPlane`/yslope
+    formula.
+  - `r_draw.c`: `R_MakeSpans` column-adjacent top/bottom open/close branch order
+    and `x-1`/`minx-1`/`maxx+1` sentinels; `R_MapPlane` row cache by planeheight,
+    `FixedMul(planeheight, yslope[row])`, `distscale[x1]`, unsigned
+    `(viewangle+xtoviewangle[x1])>>ANGLETOFINESHIFT`, cos/sine length products,
+    x/y frac sign wrapping, `bspfake` viewx/viewy, `(distance>>LIGHTZSHIFT)`
+    clamp 127, `zlight[lightnum][bin]`; `R_DrawSpan` spot
+    `((yfrac>>10)&4032)+((xfrac>>16)&63)` and COLORMAP lookup;
+    `R_ExecuteSetViewSize` distscale `FixedDiv(FRACUNIT, abs(finecosine[raw>>19]))`.
+  - `r_sky.c`: `SKYFLATNAME "F_SKY1"` and renderer sky skip; `r_data.c`
+    `R_FlatNumForName` namespace resolution underlying the existing M2 flats API.
+  - No C file/function/constant name was invented. `FRACBITS=16`,
+    `FRACUNIT=65536`, `MAXVISPLANES=1024`, `LIGHTLEVELS=16`, `LIGHTZSHIFT=20`,
+    `MAXLIGHTZ=128`, `SKYFLATNAME` are pinned from source/headers.
+- Intentional differences from source Doom (documented, not approximate algorithm
+  swaps):
+  - Plane top/bottom boards are padded to 322 logical cells; top remains the
+    source sentinel `0xFF`, but all bottom pad cells are pre-zeroed. Source
+    `pl->bottom` span cells are uninitialized except where written; the zero pad
+    is a safe deterministic test surface that never participates in a drawable
+    band because every drawable top/bottom is finite (0..199) and sentinel/empty
+    bands are rejected.
+  - The wall-pass deferred plane fill lower-tier clamp uses the pre-column
+    `ceilingclip` snapshot captured by the frozen M3 wall rasterizer, not a
+    recomputed clip after each wall side effect. This keeps combined wall bytes
+    identical to the accepted M3-06 fixture; band top/bottom formulas otherwise
+    follow `R_MarkCeiling`/`R_MarkFloor` exactly.
+  - Signed negative `distance>>LIGHTZSHIFT` values adopt source unsigned
+    clamp-127 behavior through explicit low-32 transport, instead of a native
+    negative shift. The trace's start `XFrac`/`YFrac` fields record the
+    `R_MapPlane` row coordinates before per-pixel stepping (corrected independent
+    oracle semantics), while the frame still advances x/y per inclusive pixel.
+  - `PlaneFlatCache` owns exactly one private 4,096-byte `FlatImage` per unique
+    actually-used non-sky flat. Reset frees images once; an old image pointer is
+    invalid after reset. No WAD read, `FlatLoad`, colormap decode or heap
+    allocation occurs inside x/pixel loops. Failure paths release private plane/
+    timeline/zlight/cache/frame/coverage owners and preserve caller target bytes.
+  - A resolved flat index `0` is an ordinary flat key (never treated as sky);
+    sky identity comes only from resolved `F_SKY1` index, `skyflatnum`. Visplane
+    identity key remains `(height,picnum,lightlevel)`, sky normalized; splits copy
+    the same key with start..stop bounds and zeroed row boards.
+- Deterministic synthetic fixture/oracle:
+  - `scripts/gen_plane_golden.py` is an integer-only independent oracle over
+    pinned trig data, the M3-06 synthetic wall oracle and its own Find/Check/
+    MakeSpans/MapPlane/zlight/spot formulas. It emits only original synthetic
+    resources/frames: PI01 (T01 closed room) full 64,000 bytes/hash
+    `59E2505D8A6CAD85`, PI02 (P02 portals/deferred sky) full bytes/hash
+    `CE2C4D994F5EDF3A`, 64x64 flat spot cases, yslope 200 rows, distscale 320
+    columns, 2,048 zlight levels, ten MapPlane samples, 14-field span records,
+    sample rows and counters. Regeneration twice is byte-identical; tracked
+    fixture SHA256 `7A6F111FDC45D5D4DBF2B08353992A8D873C0BEC37B6130E42E032492187791D`.
+  - The oracle correction from two generator bugs was source-backed: finecosine
+    is the sine table second-quarter alias without `FINEMASK` wrap
+    (`sine[index+2048]`), and spot x/y shifts use `FRACBITS=16`, not `FRACUNIT`;
+    a third correction records span-start x/y frac in the trace. PI frame hashes
+    and every sample/counter stayed unchanged; production full-frame byte/hash
+    comparisons confirm the corrected fixture.
+- Actual Windows verification (PureBasic 6.41 Windows x64):
+  - PL01-PL60: **60 cases / 211 assertions / 0 failures**, exit 0. PI01-PI03:
+    **3 cases / 76 assertions / 0 failures**, exit 0; PI01/PI02 cover every
+    64,000 frame byte, sample column x 200 rows, counters, coverage and all 14
+    plane-span fields against the independent fixture; PI03 covers A->B->A flat
+    lifecycle, repeat byte-stability, late 4,095-byte used-FLOOR1 rollback (target
+    64,000 bytes preserved), short 16-table COLORMAP entry rejection, capacity-2
+    span-trace late rollback, zero emitted WallSpans with valid subsector/plane
+    context, and frozen synthetic M3-04/M3-06 hashes.
+  - Optional PI04 owner: **1 case / 150 assertions / 0 failures**, exit 0; no
+    path: **0 cases / 0 assertions / NOT RUN**, exit 0. Owner IWAD
+    12,408,292 bytes/MD5 `c4fe9fd920207691a9f493668e0a2083` unchanged before/after.
+    Per-map combined counters (NOT LOCKED hashes):
+    E1M1 hash `B6C3BD9880758292`, spans 35, visplanes 22 (regular/sky/empty/
+    populated 21/1/8/13), Find reuse/create/split 47/15/7, floor/ceiling
+    vis/pixels 10/3/25695/25937, sky deferred 0/0, plane spans/pixels/opened/closed
+    282/51632/282/282, row-cache 54/228, flat unique/loaded/count/alloc 4/4/4/5, wall px/coverage
+    12368/12368, nonzero/zero 63907/93, allocations 38.
+    E1M2 hash `D32BD22FF01A9BBB`, spans 54, visplanes 37 (37/0/19/18), Find 58/
+    25/12, floor/ceiling 13/5/24660/24982, sky 0/0, plane spans/pixels/opened/closed
+    418/49642/418/418, row-cache 208/210, flat 3/3/3/4, wall 14358/14358,
+    nonzero/zero 63947/53,
+    allocations 45.
+    E4M1 hash `0AFA2E970F9C08C8`, spans 69, visplanes 28 (27/1/17/10), Find 62/
+    17/11, floor/ceiling 7/3/22644/11516, sky deferred 71 bands/1191 pixels,
+    plane spans/pixels/opened/closed 146/34160/146/146, row-cache 4/142,
+    flat 4/4/4/5, wall 28649/28649,
+    nonzero/zero 62147/1853, allocations 33.
+    Frozen M3-04 span/counter and M3-05 debug fingerprints reproduced for all
+    maps; historical M3-06 textured hashes
+    `183BA53FCECECBC8`/`835A0339A38B190E`/`03B5C8CFA517FC7E` unchanged and
+    reported NOT LOCKED. New owner combined hashes are NOT LOCKED pending an
+    independent same-camera source image comparison (**REFERENCE UNAVAILABLE**).
+  - All prior M1/M2/M3 tests and executable modes were rerun in the full scripts
+    with and without owner IWAD; version remains `0.3.0`. Full Windows script
+    totals: no-IWAD **211/211 checks**, owner-IWAD **291/291 checks**, both exit
+    0; seven `--show-planes` CLI smoke cases (13 assertions) are included.
+  - Real GUI `--show-planes` E1M1/E1M2/E4M1 windows were opened at a verified
+    960x600 client area, captured with `PrintWindow` client-only into ignored
+    temp PNGs, closed via WM_CLOSE and exited 0. Visual inspection shows real
+    textured floor/ceiling flats, intact wall tiers and deferred black F_SKY1
+    background through openings, without observed overwrite or stripe artifacts.
+- Memory/performance and gaps:
+  - Plane frame owns 3 bounded arrays (1,024 records <= 65,536 bytes, 2 x 322 x
+    1,024 `.l` boards, private row-cache/tables); timeline owns visits/events;
+    zlight owns one 16 x 128 numeric `.l` allocation; flat cache owns entries plus
+    unique 4,096-byte images under 1,024-entry cap; span trace <= 262,144 records;
+    combined metadata <= 67,108,864 bytes. No per-pixel allocations/WAD I/O.
+  - Cold/warm plane timing was **NOT MEASURED** with an extended BEN01 QPC
+    method; only allocation/ownership counters are reported. This is not a
+    Doom FPS claim.
+  - No sky pixel texture, sprites, masked midtexture back-to-front, animation,
+    extralight/light animation, gameplay, saves/audio or Linux x64 runtime.
+    Linux is **NOT RUN**; Git Bash `bash -n` only syntax-checks. Human plane/sky
+    window visual inspection was RUN via the real 960x600 GUI capture below;
+    no original-C full-image comparison was available (**REFERENCE UNAVAILABLE**).
+  - Documentation lookup: Context7 **NOT NEEDED** for this slice (no new external
+    library/CLI API); official PureBasic 6.41 compiler/direct probes and pinned C
+    were used. No Context7 query is claimed, and no WAD/private data was sent.
+
 ## Compatibility conventions adopted so far
 
 - WAD and other binary data will be read field by field with explicit

@@ -29,6 +29,7 @@ XIncludeFile "Renderer/WallTextureCache.pbi"
 XIncludeFile "Renderer/WallLighting.pbi"
 XIncludeFile "Renderer/TexturedWallDraw.pbi"
 XIncludeFile "Renderer/TexturedRenderMain.pbi"
+XIncludeFile "Renderer/PlaneRenderMain.pbi"
 XIncludeFile "WAD/WAD.pbi"
 XIncludeFile "Graphics/Palette.pbi"
 XIncludeFile "Graphics/Patch.pbi"
@@ -43,6 +44,8 @@ XIncludeFile "Map/MapLoader.pbi"
 #DoomPB_ExitOk      = 0
 #DoomPB_ExitFailure = 1
 #DoomPB_ExitUsage   = 2
+
+
 
 Procedure PrintVersion()
   PrintN(#DoomPB_Name + " " + #DoomPB_Version)
@@ -59,6 +62,7 @@ Procedure PrintHelp()
   PrintN("  " + #DoomPB_Name + " --iwad <path> --map-info <ExMy>")
   PrintN("  " + #DoomPB_Name + " --iwad <path> --show-walls <ExMy>")
   PrintN("  " + #DoomPB_Name + " --iwad <path> --show-textured-walls <ExMy>")
+  PrintN("  " + #DoomPB_Name + " --iwad <path> --show-planes <ExMy>")
   PrintN("")
   PrintN("Options:")
   PrintN("  -h, --help       Show this help and exit")
@@ -78,12 +82,18 @@ Procedure PrintHelp()
   PrintN("                     Render a real M3-06 textured/COLORMAP-lit wall-only")
   PrintN("                     320x200 frame from the player-one start at 3x")
   PrintN("                     (requires --iwad)")
+  PrintN("      --show-planes <ExMy>")
+  PrintN("                     Render the M4-01 wall + floor/ceiling flat frame in the")
+  PrintN("                     same M3 online traversal order; F_SKY1 pixels are")
+  PrintN("                     deferred/background and counted (requires --iwad)")
   PrintN("")
   PrintN("Without options " + #DoomPB_Name + " prints its bootstrap status and exits.")
   PrintN("WAD metadata, named lookup, TITLEPIC presentation, M3-05 wall-only")
-  PrintN("debug colors and M3-06 textured/COLORMAP-lit wall columns are available.")
-  PrintN("Textured previews remain wall-only: floors, ceilings, sky, sprites and masked")
-  PrintN("two-sided midtextures are not rendered yet.")
+  PrintN("debug colors, M3-06 textured/COLORMAP-lit wall columns and the M4-01")
+  PrintN("wall + floor/ceiling flat preview are available.")
+  PrintN("The M4-01 preview draws regular flats after walls; F_SKY1 stays")
+  PrintN("deferred/background and counted. Sprites and masked two-sided")
+  PrintN("midtextures are not rendered yet; sky pixels are M4-02 scope.")
   PrintN("Payload bytes are exposed only through the WAD API, not through this CLI.")
   PrintN("Gameplay is not implemented yet.")
   PrintN("No game data is read unless --iwad is supplied.")
@@ -92,11 +102,13 @@ EndProcedure
 Procedure PrintBootstrapStatus()
   PrintN(#DoomPB_Name + " " + #DoomPB_Version)
   PrintN("Status: bootstrap build. WAD parsing, lump lookup, PLAYPAL/patch")
-  PrintN("decoding, a windowed TITLEPIC mode, an M3-05 wall-only debug-color frame and")
-  PrintN("an M3-06 textured/COLORMAP-lit wall-only frame mode are available.")
+  PrintN("decoding, a windowed TITLEPIC mode, an M3-05 wall-only debug-color frame,")
+  PrintN("an M3-06 textured/COLORMAP-lit wall-only frame mode and an M4-01")
+  PrintN("wall + floor/ceiling flat mode are available.")
   PrintN("Gameplay is not implemented yet.")
   PrintN("Use '--iwad <path> --dump-info', '--lump-info <name>', '--show-title',")
-  PrintN("'--map-info <ExMy>', '--show-walls <ExMy>' or '--show-textured-walls <ExMy>'.")
+  PrintN("'--map-info <ExMy>', '--show-walls <ExMy>', '--show-textured-walls <ExMy>'")
+  PrintN("or '--show-planes <ExMy>'.")
   PrintN("A legally obtained DOOM.WAD is required for game data, never for this build itself.")
 EndProcedure
 
@@ -901,6 +913,412 @@ Procedure.i ShowTexturedWalls(Path.s, MapName.s)
   ProcedureReturn exitCode
 EndProcedure
 
+; Opt-in M4-01 combined wall + floor/ceiling flat preview: the existing M2
+; resource/map pipeline, M3-04 online visibility with the new plane chronology
+; hooks, M3-06 textured wall columns and the new regular-flat pass. F_SKY1 is
+; detected/normalized and deferred to background with explicit counters; it is
+; never loaded or drawn as an ordinary flat. Prints metadata/counters/FNV only,
+; never WAD bytes, texture/flat pixels, coordinates or screenshots.
+Procedure.i ShowPlanes(Path.s, MapName.s)
+  Protected canonical.s = MapCanonicalName(MapName)
+  Protected wadOpened.i = #False
+  Protected palIndex.i
+  Protected palSize.q
+  Protected pnamesSize.q
+  Protected texture1Size.q
+  Protected texture2Size.q = 0
+  Protected colormapSize.q
+  Protected *palBytes.Byte = 0
+  Protected *pnamesBytes.Byte = 0
+  Protected *texture1Bytes.Byte = 0
+  Protected *texture2Bytes.Byte = 0
+  Protected *colormapBytes.Byte = 0
+  Protected hasTexture2.i = #False
+  Protected palette.PaletteSet
+  Protected pnames.PNamesTable
+  Protected textures.TextureCatalog
+  Protected flats.FlatCatalog
+  Protected level.MapLevel
+  Protected projection.Projection
+  Protected view.WallView
+  Protected colormap.ColormapSet
+  Protected target.FrameBuffer
+  Protected renderResult.PlaneRenderResult
+  Protected thingIndex.l = 0
+  Protected subsectorIndex.l = 0
+  Protected sectorIndex.l = 0
+  Protected spanCount.l = 0
+  Protected segmentCount.l = 0
+  Protected texturePlanCount.l = 0
+  Protected visplanes.l = 0
+  Protected regularVisplanes.l = 0
+  Protected skyVisplanes.l = 0
+  Protected emptyVisplanes.l = 0
+  Protected populatedVisplanes.l = 0
+  Protected skyDeferredBands.l = 0
+  Protected skyDeferredPixels.l = 0
+  Protected planeSpans.l = 0
+  Protected planePixels.l = 0
+  Protected planeOpenedRows.l = 0
+  Protected planeClosedRows.l = 0
+  Protected planeRowCacheHits.l = 0
+  Protected planeRowCacheMisses.l = 0
+  Protected planeColormapTexels.l = 0
+  Protected floorVisplanes.l = 0
+  Protected ceilingVisplanes.l = 0
+  Protected floorPixels.l = 0
+  Protected ceilingPixels.l = 0
+  Protected findCalls.l = 0
+  Protected findReuse.l = 0
+  Protected findCreate.l = 0
+  Protected checkCalls.l = 0
+  Protected checkMerges.l = 0
+  Protected checkSplits.l = 0
+  Protected markCeilingCalls.l = 0
+  Protected markFloorCalls.l = 0
+  Protected markCeilingBands.l = 0
+  Protected markFloorBands.l = 0
+  Protected timelineVisits.l = 0
+  Protected timelineEvents.l = 0
+  Protected zeroSpanVisits.l = 0
+  Protected skyFindVisits.l = 0
+  Protected regularFindVisits.l = 0
+  Protected wallProcessedColumns.l = 0
+  Protected wallTextureColumnsComputed.l = 0
+  Protected wallMiddlePixels.l = 0
+  Protected wallUpperPixels.l = 0
+  Protected wallLowerPixels.l = 0
+  Protected wallDrawnPixels.l = 0
+  Protected wallDrawRanges.l = 0
+  Protected wallClippedColumns.l = 0
+  Protected wallEmptyColumns.l = 0
+  Protected wallOutOfFrameColumns.l = 0
+  Protected wallTextureSamples.l = 0
+  Protected wallCoveredPixels.l = 0
+  Protected nonzeroBytes.l = 0
+  Protected zeroBytes.l = 0
+  Protected composedTextures.l = 0
+  Protected requestedReferences.l = 0
+  Protected reusedReferences.l = 0
+  Protected maskedMidSpans.l = 0
+  Protected shortTextures.l = 0
+  Protected textureCacheAlloc.l = 0
+  Protected flatCacheCount.l = 0
+  Protected flatCacheUnique.l = 0
+  Protected flatCacheLoaded.l = 0
+  Protected planeFrameAlloc.l = 0
+  Protected timelineAlloc.l = 0
+  Protected zlightAlloc.l = 0
+  Protected wallTableAlloc.l = 0
+  Protected visibilityAlloc.l = 0
+  Protected clipAlloc.l = 0
+  Protected frameAlloc.l = 0
+  Protected coverageAlloc.l = 0
+  Protected metadataAlloc.l = 0
+  Protected allocations.l = 0
+  Protected visitedNodes.l = 0
+  Protected visitedSubsectors.l = 0
+  Protected processedSegs.l = 0
+  Protected hash.q = 0
+  Protected flatCount.l = 0
+  Protected textureCount.l = 0
+  Protected pnamesCount.l = 0
+  Protected paletteCount.l = 0
+  Protected colormapCount.l = 0
+  Protected windowTitle.s = ""
+  Protected errorText.s = ""
+  Protected exitCode.i = #DoomPB_ExitFailure
+
+  If WADOpen(Path) = #False
+    PrintN(#DoomPB_Name + ": " + WADLastError())
+    ProcedureReturn #DoomPB_ExitFailure
+  EndIf
+  wadOpened = #True
+
+  palIndex = WADFindLump("PLAYPAL")
+  If palIndex < 0
+    errorText = "PLAYPAL not found: " + WADLastError()
+  Else
+    palSize = WADLumpSize(palIndex)
+    If palSize <= 0
+      errorText = "PLAYPAL is empty."
+    Else
+      *palBytes = AllocateMemory(palSize)
+      If *palBytes = 0
+        errorText = "Out of memory reading PLAYPAL."
+      ElseIf WADReadLump(palIndex, *palBytes, palSize) = #False
+        errorText = "Cannot read PLAYPAL: " + WADLastError()
+      ElseIf PaletteDecode(*palBytes, palSize, @palette) = #False
+        errorText = "Cannot decode PLAYPAL: " + PaletteLastError()
+      EndIf
+      If *palBytes <> 0
+        FreeMemory(*palBytes)
+        *palBytes = 0
+      EndIf
+      If errorText = ""
+        paletteCount = PaletteCount(@palette)
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    *pnamesBytes = ShowWallsReadLumpBuffer("PNAMES", @pnamesSize)
+    If *pnamesBytes = 0
+      errorText = "PNAMES is missing, empty or unreadable."
+    ElseIf PNamesDecode(*pnamesBytes, pnamesSize, @pnames) = #False
+      errorText = "Cannot decode PNAMES: " + PNamesLastError()
+    EndIf
+    If *pnamesBytes <> 0
+      FreeMemory(*pnamesBytes)
+      *pnamesBytes = 0
+    EndIf
+    If errorText = ""
+      pnamesCount = PNamesCount(@pnames)
+      If pnamesCount <= 0
+        errorText = "PNAMES has no patch names."
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    *texture1Bytes = ShowWallsReadLumpBuffer("TEXTURE1", @texture1Size)
+    If *texture1Bytes = 0
+      errorText = "TEXTURE1 is missing, empty or unreadable."
+    Else
+      hasTexture2 = Bool(WADFindLump("TEXTURE2") >= 0)
+      If hasTexture2
+        *texture2Bytes = ShowWallsReadLumpBuffer("TEXTURE2", @texture2Size)
+        If *texture2Bytes = 0
+          errorText = "TEXTURE2 exists but is empty or unreadable."
+        EndIf
+      EndIf
+    EndIf
+    If errorText = ""
+      If TextureCatalogDecode(*texture1Bytes, texture1Size, *texture2Bytes,
+                              texture2Size, hasTexture2, @textures) = #False
+        errorText = "Cannot decode TEXTURE1/TEXTURE2: " + TextureDefsLastError()
+      EndIf
+    EndIf
+    If *texture1Bytes <> 0
+      FreeMemory(*texture1Bytes)
+      *texture1Bytes = 0
+    EndIf
+    If *texture2Bytes <> 0
+      FreeMemory(*texture2Bytes)
+      *texture2Bytes = 0
+    EndIf
+    If errorText = ""
+      If TextureCatalogResolve(@textures, @pnames) = #False
+        errorText = "Cannot resolve texture patch names against the WAD: " + TextureDefsLastError()
+      Else
+        textureCount = TextureCatalogCount(@textures)
+        If textureCount <= 0
+          errorText = "TEXTURE1/TEXTURE2 define no textures."
+        EndIf
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    *colormapBytes = ShowWallsReadLumpBuffer("COLORMAP", @colormapSize)
+    If *colormapBytes = 0
+      errorText = "COLORMAP is missing, empty or unreadable."
+    ElseIf ColormapDecode(*colormapBytes, colormapSize, @colormap) = #False
+      errorText = "Cannot decode COLORMAP: " + ColormapLastError()
+    EndIf
+    If *colormapBytes <> 0
+      FreeMemory(*colormapBytes)
+      *colormapBytes = 0
+    EndIf
+    If errorText = ""
+      colormapCount = ColormapCount(@colormap)
+      If colormapCount < #PLANE_ZLIGHT_MapMin
+        errorText = "COLORMAP has fewer than " + Str(#PLANE_ZLIGHT_MapMin) + " classic plane lighting tables."
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    If FlatCatalogBuild(@flats) = #False
+      errorText = "Cannot build the F_START/F_END flat catalog: " + FlatLastError()
+    Else
+      flatCount = FlatCatalogCount(@flats)
+      If flatCount <= 0
+        errorText = "F_START/F_END flat namespace is empty."
+      EndIf
+    EndIf
+  EndIf
+
+  If errorText = ""
+    If MapLevelLoad(canonical, @level) = #False
+      errorText = "Cannot load map " + canonical + ": " + MapLevelLastError()
+    EndIf
+  EndIf
+  If errorText = ""
+    If MapLevelValidateResources(@level, @flats, @textures) = #False
+      errorText = "Map resource binding failed: " + MapLevelLastError()
+    EndIf
+  EndIf
+  If errorText = ""
+    If ProjectionInitClassic(@projection) = #False
+      errorText = "Cannot initialize the classic 320x200 projection: " + ProjectionLastError()
+    EndIf
+  EndIf
+  If errorText = ""
+    If WallRenderPlayerStartView(@level, @view, @thingIndex, @subsectorIndex,
+                                 @sectorIndex) = #False
+      errorText = "Cannot derive the player-one start view: " + WallRenderLastError()
+    EndIf
+  EndIf
+  If errorText = ""
+    If PlaneRenderFrame(@level, @view, @projection, @flats, @textures,
+                        @colormap, @target, @renderResult, #True) = #False
+      errorText = "Cannot render the combined wall+plane frame: " + PlaneRenderLastError()
+    ElseIf PlaneRenderGetStats(@renderResult, @spanCount, @segmentCount, 0,
+                                @texturePlanCount, 0,
+                                @visplanes, @regularVisplanes, @skyVisplanes,
+                                @emptyVisplanes, @populatedVisplanes,
+                                @skyDeferredBands, @skyDeferredPixels,
+                                @planeSpans, @planePixels,
+                                @planeOpenedRows, @planeClosedRows,
+                                @planeRowCacheHits, @planeRowCacheMisses,
+                                @planeColormapTexels,
+                                @floorVisplanes, @ceilingVisplanes,
+                                @floorPixels, @ceilingPixels,
+                                @findCalls, @findReuse, @findCreate,
+                                @checkCalls, @checkMerges, @checkSplits,
+                                @markCeilingCalls, @markFloorCalls,
+                                @markCeilingBands, @markFloorBands,
+                                @timelineVisits, @timelineEvents,
+                                @zeroSpanVisits, @skyFindVisits, @regularFindVisits,
+                                0, 0, 0, 0,
+                                @wallProcessedColumns, @wallTextureColumnsComputed,
+                                @wallMiddlePixels, @wallUpperPixels, @wallLowerPixels,
+                                @wallDrawnPixels, 0, 0, 0, @wallDrawRanges,
+                                @wallEmptyColumns, @wallClippedColumns,
+                                @wallOutOfFrameColumns, @wallTextureSamples, 0, 0,
+                                @wallCoveredPixels, @nonzeroBytes, @zeroBytes,
+                                @composedTextures, @requestedReferences,
+                                @reusedReferences, @maskedMidSpans, @shortTextures,
+                                @textureCacheAlloc, @flatCacheCount, 0,
+                                0, @flatCacheUnique, @flatCacheLoaded, 0,
+                                @planeFrameAlloc, @timelineAlloc, @zlightAlloc,
+                                @wallTableAlloc, @visibilityAlloc, @clipAlloc,
+                                @frameAlloc, @coverageAlloc, @metadataAlloc,
+                                @allocations,
+                                @visitedNodes, @visitedSubsectors, @processedSegs,
+                                0, 0, 0, 0, 0, 0, @hash) = #False
+      errorText = "Cannot read the combined frame statistics: " + PlaneRenderLastError()
+    ElseIf planePixels <= 0
+      errorText = "The combined frame contains zero regular floor/ceiling flat pixels."
+    ElseIf wallDrawnPixels <= 0
+      errorText = "The combined frame contains zero textured wall pixels."
+    ElseIf nonzeroBytes <= 0
+      errorText = "The combined frame contains zero nonzero palette bytes."
+    ElseIf wallCoveredPixels <> wallDrawnPixels
+      errorText = "Wall coverage marks disagree with painted wall pixels."
+    EndIf
+  EndIf
+
+  If errorText = ""
+    WADClose()
+    wadOpened = #False
+  EndIf
+
+  If errorText = ""
+    PrintN(#DoomPB_Name + " " + #DoomPB_Version)
+    PrintN("Map: " + canonical)
+    PrintN("PLAYPAL colors: " + Str(paletteCount))
+    PrintN("PNAMES names: " + Str(pnamesCount) + ", textures: " + Str(textureCount) +
+           ", flats: " + Str(flatCount) + ", COLORMAP tables: " + Str(colormapCount))
+    PrintN("Player-one THING index: " + Str(thingIndex) +
+           ", subsector: " + Str(subsectorIndex) + ", floor sector: " + Str(sectorIndex))
+    PrintN("View height source: player start floor + VIEWHEIGHT 41 units (static, no bob).")
+    PrintN("Visible wall spans: " + Str(spanCount) + ", M3-05 plans: " +
+           Str(segmentCount) + ", textured material plans: " + Str(texturePlanCount))
+    PrintN("Visplanes: created " + Str(visplanes) + ", regular " + Str(regularVisplanes) +
+           ", sky " + Str(skyVisplanes) + ", empty " + Str(emptyVisplanes) +
+           ", used/populated " + Str(populatedVisplanes))
+    PrintN("Plane roles: floor " + Str(floorVisplanes) + ", ceiling " + Str(ceilingVisplanes) +
+           "; floor pixels " + Str(floorPixels) + ", ceiling pixels " + Str(ceilingPixels) +
+           ", regular flat pixels total " + Str(planePixels))
+    PrintN("Sky (F_SKY1) deferred: visplanes " + Str(skyVisplanes) + ", bands " +
+           Str(skyDeferredBands) + ", pixels " + Str(skyDeferredPixels) +
+           " (background, no flat load/draw).")
+    PrintN("FindPlane: calls " + Str(findCalls) + ", reused " + Str(findReuse) +
+           ", created " + Str(findCreate) + "; CheckPlane: calls " + Str(checkCalls) +
+           ", merges " + Str(checkMerges) + ", splits " + Str(checkSplits))
+    PrintN("Plane marks: ceiling calls " + Str(markCeilingCalls) + "/stored bands " +
+           Str(markCeilingBands) + ", floor calls " + Str(markFloorCalls) + "/stored bands " +
+           Str(markFloorBands))
+    PrintN("Chronology audit: subsector visits " + Str(timelineVisits) +
+           ", clip-span events " + Str(timelineEvents) + ", zero-span visits " +
+           Str(zeroSpanVisits) + ", sky-find visits " + Str(skyFindVisits) +
+           ", regular-find visits " + Str(regularFindVisits))
+    PrintN("Plane spans: opened rows " + Str(planeOpenedRows) + ", closed rows " +
+           Str(planeClosedRows) + ", horizontal spans " + Str(planeSpans) +
+           "; row-cache hits " + Str(planeRowCacheHits) + ", misses " +
+           Str(planeRowCacheMisses) + ", COLORMAP texels " + Str(planeColormapTexels))
+    PrintN("Textured wall pixels: middle " + Str(wallMiddlePixels) + ", upper " +
+           Str(wallUpperPixels) + ", lower " + Str(wallLowerPixels) + ", writes total " +
+           Str(wallDrawnPixels) + "; columns " + Str(wallProcessedColumns) +
+           ", texture columns " + Str(wallTextureColumnsComputed) +
+           ", draw ranges " + Str(wallDrawRanges))
+    PrintN("Wall clipping: clipped columns " + Str(wallClippedColumns) +
+           ", empty columns " + Str(wallEmptyColumns) + ", out-of-frame columns " +
+           Str(wallOutOfFrameColumns) + "; texels sampled " + Str(wallTextureSamples))
+    PrintN("Explicit wall coverage: covered cells " + Str(wallCoveredPixels) +
+           ", equal to painted wall pixels; plane overlap aborts explicitly.")
+    PrintN("Used-texture cache: composed " + Str(composedTextures) +
+           " from " + Str(requestedReferences) + " tier references, reused " +
+           Str(reusedReferences) + "; masked middles deferred " + Str(maskedMidSpans) +
+           "; short textures " + Str(shortTextures))
+    PrintN("Used-flat cache: unique " + Str(flatCacheUnique) + ", loaded " +
+           Str(flatCacheLoaded) + ", entries " + Str(flatCacheCount) +
+           " (all while WAD open; sky never loaded).")
+    PrintN("Frame palette bytes: zero " + Str(zeroBytes) + ", nonzero " +
+           Str(nonzeroBytes) + " (total " + Str(#PLANERENDER_FramePixelCount) + ").")
+    PrintN("Allocations: total " + Str(allocations) + " (visibility " +
+           Str(visibilityAlloc) + ", plane frame " + Str(planeFrameAlloc) +
+           ", timeline " + Str(timelineAlloc) + ", zlight " + Str(zlightAlloc) +
+           ", wall table " + Str(wallTableAlloc) + ", texture cache " +
+           Str(textureCacheAlloc) + ", clip " + Str(clipAlloc) + ", frame " +
+           Str(frameAlloc) + ", coverage " + Str(coverageAlloc) + ", metadata " +
+           Str(metadataAlloc) + ").")
+    PrintN("Plane lighting: zlight 16x128 over COLORMAP map levels 0..31, sector light + extralight 0.")
+    PrintN("Frame: 320x200 row-major indexed/COLORMAP-mapped palette plane, at " +
+           Str(#VIDEO_DefaultScale) + "x nearest-neighbour presentation.")
+    PrintN("Frame hash (FNV-1a64, 64000 palette bytes): " + WallFrameHashHex64(hash))
+    PrintN("Close the window to exit.")
+    windowTitle = "DoomPB - Textured Walls + Flats - " + canonical
+    If VideoShowFramebuffer(@target, @palette, #VIDEO_DefaultScale, windowTitle) = #False
+      errorText = "Cannot show the combined wall+plane frame: " + VideoLastError()
+    Else
+      exitCode = #DoomPB_ExitOk
+    EndIf
+  EndIf
+
+  If errorText <> ""
+    PrintN(#DoomPB_Name + ": " + errorText)
+  EndIf
+
+  ; All owned buffers/objects are released on every path; no WAD bytes retained.
+  FrameBufferReset(@target)
+  PlaneRenderResultReset(@renderResult)
+  WallViewReset(@view)
+  ProjectionReset(@projection)
+  MapLevelReset(@level)
+  FlatCatalogReset(@flats)
+  TextureCatalogReset(@textures)
+  PNamesReset(@pnames)
+  ColormapReset(@colormap)
+  PaletteReset(@palette)
+  If wadOpened
+    WADClose()
+  EndIf
+  ProcedureReturn exitCode
+EndProcedure
+
 Define argumentCount.i
 Define argument.s
 Define exitCode.i = #DoomPB_ExitOk
@@ -915,6 +1333,8 @@ Define showWalls.i = #False
 Define wallsMapName.s = ""
 Define showTexturedWalls.i = #False
 Define texturedMapName.s = ""
+Define showPlanes.i = #False
+Define planesMapName.s = ""
 Define sawIwad.i = #False
 Define index.i
 Define parseError.s = ""
@@ -953,6 +1373,9 @@ ElseIf argumentCount = 1
       exitCode = #DoomPB_ExitUsage
     Case "--show-textured-walls"
       PrintUsageError("'--show-textured-walls' requires '--iwad <path> <ExMy>'.")
+      exitCode = #DoomPB_ExitUsage
+    Case "--show-planes"
+      PrintUsageError("'--show-planes' requires '--iwad <path> <ExMy>'.")
       exitCode = #DoomPB_ExitUsage
     Default
       PrintUsageError("unknown option '" + argument + "'.")
@@ -1045,6 +1468,20 @@ Else
             showTexturedWalls = #True
           EndIf
         EndIf
+      Case "--show-planes"
+        If showPlanes
+          parseError = "duplicate '--show-planes' option."
+        ElseIf index + 1 >= argumentCount
+          parseError = "'--show-planes' requires a map name."
+        Else
+          index + 1
+          planesMapName = ProgramParameter(index)
+          If planesMapName = ""
+            parseError = "'--show-planes' requires a non-empty map name."
+          Else
+            showPlanes = #True
+          EndIf
+        EndIf
       Default
         parseError = "unknown option '" + argument + "'."
     EndSelect
@@ -1054,8 +1491,8 @@ Else
   If parseError <> ""
     PrintUsageError(parseError)
     exitCode = #DoomPB_ExitUsage
-  ElseIf dumpInfo + lumpInfo + showTitle + mapInfo + showWalls + showTexturedWalls > 1
-    PrintUsageError("only one of '--dump-info', '--lump-info', '--show-title', '--map-info', '--show-walls' and '--show-textured-walls' may be used.")
+  ElseIf dumpInfo + lumpInfo + showTitle + mapInfo + showWalls + showTexturedWalls + showPlanes > 1
+    PrintUsageError("only one of '--dump-info', '--lump-info', '--show-title', '--map-info', '--show-walls', '--show-textured-walls' and '--show-planes' may be used.")
     exitCode = #DoomPB_ExitUsage
   ElseIf dumpInfo And sawIwad
     exitCode = DumpWadInfo(wadPath)
@@ -1069,6 +1506,8 @@ Else
     exitCode = ShowWalls(wadPath, wallsMapName)
   ElseIf showTexturedWalls And sawIwad
     exitCode = ShowTexturedWalls(wadPath, texturedMapName)
+  ElseIf showPlanes And sawIwad
+    exitCode = ShowPlanes(wadPath, planesMapName)
   ElseIf dumpInfo
     PrintUsageError("'--dump-info' requires '--iwad <path>'.")
     exitCode = #DoomPB_ExitUsage
@@ -1087,8 +1526,11 @@ Else
   ElseIf showTexturedWalls
     PrintUsageError("'--show-textured-walls' requires '--iwad <path> <ExMy>'.")
     exitCode = #DoomPB_ExitUsage
+  ElseIf showPlanes
+    PrintUsageError("'--show-planes' requires '--iwad <path> <ExMy>'.")
+    exitCode = #DoomPB_ExitUsage
   ElseIf sawIwad
-    PrintUsageError("'--iwad' requires '--dump-info', '--lump-info <name>', '--show-title', '--map-info <ExMy>', '--show-walls <ExMy>' or '--show-textured-walls <ExMy>'.")
+    PrintUsageError("'--iwad' requires '--dump-info', '--lump-info <name>', '--show-title', '--map-info <ExMy>', '--show-walls <ExMy>', '--show-textured-walls <ExMy>' or '--show-planes <ExMy>'.")
     exitCode = #DoomPB_ExitUsage
   Else
     PrintUsageError("no action specified.")

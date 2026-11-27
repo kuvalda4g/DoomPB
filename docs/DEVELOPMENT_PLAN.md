@@ -343,16 +343,42 @@ Owner IWAD unchanged 12,408,292 bytes/MD5
 
 **Основные модули:** `Planes.pbi`, `Sprites.pbi`, расширение `Draw.pbi` и `RenderMain.pbi`.
 
-- [ ] Реализовать visplanes, полы, потолки, flats и небо.
-- [ ] Использовать `COLORMAP` и оригинальные правила освещения/расстояния.
-- [ ] Реализовать masked midtextures, sprite clipping и порядок перекрытия объектов.
-- [ ] Реализовать анимацию текстур и flats.
-- [ ] Вывести оружие как overlay (PSprite rendering; управление появится позже).
-- [ ] Сверить кадры типовых комнат, дверей, лифтов, outdoor-участков и спрайтов.
-- [ ] Добавить режим записи контрольного кадра и диагностических счетчиков (без публикации исходных игровых изображений в Git).
-- [ ] Проверить корректное масштабирование в оконном и полноэкранном режимах.
+**Текущий статус:** M4-01 PARTIAL development slice accepted in the working tree;
+full M4 remains open. Version stays `0.3.0`; do not start M4-02 in the M4-01 task.
 
-**Критерий готовности:** статический кадр E1M1 выглядит как Doom (стены, полы, потолки, свет, спрайты); нет систематических артефактов прозрачности/сортировки.
+Actual Windows verification: PL01-PL60 60 cases/211 assertions/0 failures;
+PI01-PI03 3/76/0; owner PI04 1/150/0; full scripts no-IWAD **211/211** and
+owner-IWAD **291/291** checks, both exit 0; real GUI E1M1/E1M2/E4M1 previews at
+960x600, clean exit 0 and visually inspected.
+
+- [ ] Visplanes, полы, потолки, flats и небо: M4-01 PARTIAL — online
+  `R_FindPlane`/`R_CheckPlane`, pre-clip marks, real 64x64 `FlatLoad` floors/
+  ceilings after walls, `F_SKY1` detected/normalized/deferred with counts. Real
+  sky pixel texture and full outdoor rendering are not implemented.
+- [ ] `COLORMAP` и оригинальные правила освещения/расстояния: PARTIAL — plane
+  `zlight[16][128]`/`COLORMAP` remap implemented and independently checked;
+  dynamic extralight/light animation remain deferred (M4-02+).
+- [ ] masked midtextures, sprite clipping и порядок перекрытия objects: not
+  implemented (M4-02+); masked midtexture back-to-front is explicitly out of scope.
+- [ ] анимация текстур и flats: not implemented.
+- [ ] Оружие как overlay (PSprite rendering): not implemented (M5+).
+- [ ] Сверить кадры типовых rooms/doors/lifts/outdoor/sprites: PARTIAL synthetic
+  PI01/PI02 full-frame oracle byte/hash comparisons and owner PI04 counters/
+  coverage; new owner combined hashes `B6C3BD9880758292`, `D32BD22FF01A9BBB`,
+  `0AFA2E970F9C08C8` are NOT LOCKED pending independent same-camera source
+  comparison. Sky pixels/sprites/outdoor-match remain not verified.
+- [ ] Режим записи контрольного кадра и диагностических counters: PARTIAL —
+  `--show-planes <ExMy>` opt-in preview plus bounded plane span trace, counters,
+  coverage and hashes; no full M4-02 diagnostic capture mode yet.
+- [ ] Корректное масштабирование window/fullscreen: PARTIAL — 3x nearest-
+  neighbour window wired for `--show-planes`; human plane/sky visual review RUN
+  via real 960x600 preview captures of E1M1/E1M2/E4M1 (exit 0); fullscreen not
+  implemented.
+
+**Критерий готовности:** статический кадр E1M1 выглядит как Doom (стены, полы,
+потолки, свет, спрайты); нет систематических артефактов прозрачности/сортировки.
+M4-01 does not meet this full criterion: no sky pixel texture, sprites, masked
+midtexture overlay, animation or independent C same-camera comparison yet.
 
 ### M5 — Игровой цикл, ввод, движение (`v0.5.0`)
 

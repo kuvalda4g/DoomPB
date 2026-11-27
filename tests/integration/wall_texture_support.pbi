@@ -1327,4 +1327,73 @@ Procedure.i WallTexBuildT02MapLumps()
                                       0, 0, @things(0), 1)
 EndProcedure
 
+; M4-01 PI02 custom synthetic map: one zero-node subsector with a near solid
+; middle wall and two farther two-sided lines; front sector0 floor FLOOR1/h0/l160
+; and SKY ceiling F_SKY1/h128/l160, back sector1 floor FLOOR2/h32/l96 and
+; CEIL2/h96/l96. Exactly mirrors scripts/gen_plane_golden.py PI02_SCENE geometry
+; and wall_texture_support resources. No real WAD/data bytes.
+Procedure.i WallTexBuildP02MapLumps()
+  Protected Dim sectors.WallTexSectorSpec(2)
+  Protected Dim lines.WallTexLineSpec(3)
+  Protected Dim sides.WallTexSideSpec(5)
+  Protected Dim verts.WallTexVertexSpec(8)
+  Protected Dim segs.WallTexSegSpec(3)
+  Protected Dim subs.WallTexSubSpec(1)
+  Protected Dim things.WallTexThingSpec(1)
+
+  sectors(0)\FloorHeight = 0
+  sectors(0)\CeilingHeight = 128
+  sectors(0)\FloorName = "FLOOR1"
+  sectors(0)\CeilingName = "F_SKY1"
+  sectors(0)\LightLevel = 160
+  sectors(1)\FloorHeight = 32
+  sectors(1)\CeilingHeight = 96
+  sectors(1)\FloorName = "FLOOR2"
+  sectors(1)\CeilingName = "CEIL2"
+  sectors(1)\LightLevel = 96
+
+  lines(0)\V1 = 0 : lines(0)\V2 = 1 : lines(0)\Flags = 0
+  lines(0)\Side0 = 0 : lines(0)\Side1 = -1
+  lines(1)\V1 = 2 : lines(1)\V2 = 3
+  lines(1)\Flags = #MAP_ML_TWOSIDED + #MAP_ML_DONTPEGTOP
+  lines(1)\Side0 = 1 : lines(1)\Side1 = 2
+  lines(2)\V1 = 4 : lines(2)\V2 = 5
+  lines(2)\Flags = #MAP_ML_TWOSIDED
+  lines(2)\Side0 = 3 : lines(2)\Side1 = 4
+
+  sides(0)\TextureOffset = 0 : sides(0)\RowOffset = 0 : sides(0)\Sector = 0
+  sides(0)\TopName = "-" : sides(0)\BottomName = "-" : sides(0)\MidName = "TEXMID"
+  sides(1)\TextureOffset = 11 : sides(1)\RowOffset = -8 : sides(1)\Sector = 0
+  sides(1)\TopName = "TEXUP" : sides(1)\BottomName = "TEXLO" : sides(1)\MidName = "TEXMID"
+  sides(2)\TextureOffset = 0 : sides(2)\RowOffset = 0 : sides(2)\Sector = 1
+  sides(2)\TopName = "-" : sides(2)\BottomName = "-" : sides(2)\MidName = "-"
+  sides(3)\TextureOffset = 3 : sides(3)\RowOffset = 5 : sides(3)\Sector = 0
+  sides(3)\TopName = "TEXUP" : sides(3)\BottomName = "TEXLO" : sides(3)\MidName = "-"
+  sides(4)\TextureOffset = 0 : sides(4)\RowOffset = 0 : sides(4)\Sector = 1
+  sides(4)\TopName = "TEXLO" : sides(4)\BottomName = "TEXUP" : sides(4)\MidName = "-"
+
+  verts(0)\X = 100 : verts(0)\Y = 64
+  verts(1)\X = 100 : verts(1)\Y = -64
+  verts(2)\X = 300 : verts(2)\Y = 32767
+  verts(3)\X = 300 : verts(3)\Y = -32767
+  verts(4)\X = 200 : verts(4)\Y = 240
+  verts(5)\X = 300 : verts(5)\Y = 240
+  verts(6)\X = 80 : verts(6)\Y = -200
+  verts(7)\X = 160 : verts(7)\Y = -320
+
+  segs(0)\V1 = 0 : segs(0)\V2 = 1 : segs(0)\RawAngle = 49152
+  segs(0)\Line = 0 : segs(0)\Side = 0 : segs(0)\Offset = 0
+  segs(1)\V1 = 2 : segs(1)\V2 = 3 : segs(1)\RawAngle = 49152
+  segs(1)\Line = 1 : segs(1)\Side = 0 : segs(1)\Offset = 4
+  segs(2)\V1 = 4 : segs(2)\V2 = 5 : segs(2)\RawAngle = 0
+  segs(2)\Line = 2 : segs(2)\Side = 0 : segs(2)\Offset = 2
+
+  subs(0)\NumSegs = 3 : subs(0)\FirstSeg = 0
+  things(0)\X = 0 : things(0)\Y = 0 : things(0)\Angle = 0
+  things(0)\Type = 1 : things(0)\Options = 0
+  ProcedureReturn WallTexBuildMapLumps(@sectors(0), 2, @lines(0), 3, @sides(0), 5,
+                                       @verts(0), 8, @segs(0), 3, @subs(0), 1,
+                                       0, 0, @things(0), 1)
+EndProcedure
+
 CompilerEndIf

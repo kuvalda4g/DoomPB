@@ -20,13 +20,15 @@
     vanilla-lighting unit suite WT01-WT60, its synthetic texture/COLORMAP
     integration TI01-TI03 and optional real-IWAD textured TI04, M3-07 synthetic
     release integration MR01-MR36 and RI01-RI03, optional real-IWAD release RI04,
-    BEN01 wall-only frame timing, and smoke tests against the produced
+    BEN01 wall-only frame timing, M4-01 visplane/real-flat unit suite PL01-PL60,
+    its synthetic combined wall+flat integration PI01-PI03 and optional real-IWAD
+    combined walls+flats PI04, and smoke tests against the produced
     executable: --version, --help, no-argument startup, unknown-option handling,
     --lump-info argument validation and nonblocking --show-title failures. No
     commercial game data and no display are needed for the synthetic suite. When
     -IwadPath supplies an owner-owned legal IWAD, optional M3-03 I04, M3-04 I04,
-    M3-05 WI04, M3-06 TI04, M3-07 RI04 and --map-info CLI checks additionally run
-    read-only on the same file.
+    M3-05 WI04, M3-06 TI04, M3-07 RI04, M4-01 PI04 and --map-info CLI checks
+    additionally run read-only on the same file.
 
     Exit code 0 means every check passed; 1 means at least one check failed.
 
@@ -36,7 +38,7 @@
 .PARAMETER IwadPath
     Optional owner-provided legal IWAD path. It is never printed into committed
     files or logs. Without it, optional M3-03 I04, M3-04 I04, M3-05 WI04,
-    M3-06 TI04 and M3-07 RI04 are reported NOT RUN and no commercial game data is
+    M3-06 TI04, M3-07 RI04 and M4-01 PI04 are reported NOT RUN and no commercial game data is
     read.
 
 .EXAMPLE
@@ -85,6 +87,9 @@ $wallTextureIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3WallTextureIwadTes
 $m3ReleaseTestExe = Join-Path $repoRoot 'build\DoomPB-M3ReleaseTests.exe'
 $m3ReleaseIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M3ReleaseIwadTests.exe'
 $m3ReleaseBenchmarkExe = Join-Path $repoRoot 'build\DoomPB-M3ReleaseBenchmark.exe'
+$planeTestExe = Join-Path $repoRoot 'build\DoomPB-PlaneRenderTests.exe'
+$planeIntegrationTestExe = Join-Path $repoRoot 'build\DoomPB-M4PlaneTests.exe'
+$planeIwadTestExe = Join-Path $repoRoot 'build\DoomPB-M4PlaneIwadTests.exe'
 
 $script:checks   = 0
 $script:failures = 0
@@ -104,11 +109,11 @@ function Test-Condition {
 }
 
 function Invoke-BuildStep {
-    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest, [switch]$GeometryTest, [switch]$GeometryIntegrationTest, [switch]$GeometryIwadTest, [switch]$BspTest, [switch]$BspIntegrationTest, [switch]$BspIwadTest, [switch]$WallClippingTest, [switch]$WallClippingIntegrationTest, [switch]$WallClippingIwadTest, [switch]$WallProjectionTest, [switch]$WallRenderIntegrationTest, [switch]$WallRenderIwadTest, [switch]$WallTextureTest, [switch]$WallTextureIntegrationTest, [switch]$WallTextureIwadTest, [switch]$M3ReleaseTest, [switch]$M3ReleaseIwadTest, [switch]$M3ReleaseBenchmark)
+    param([switch]$Check, [switch]$Test, [switch]$LumpTest, [switch]$GraphicsTest, [switch]$DisplayTest, [switch]$ResourceTest, [switch]$TextureDefTest, [switch]$CompositeTest, [switch]$FlatSpriteTest, [switch]$MapTypesTest, [switch]$MapLoaderTest, [switch]$IntegrationTest, [switch]$FixedTest, [switch]$FixedIwadTest, [switch]$GeometryTest, [switch]$GeometryIntegrationTest, [switch]$GeometryIwadTest, [switch]$BspTest, [switch]$BspIntegrationTest, [switch]$BspIwadTest, [switch]$WallClippingTest, [switch]$WallClippingIntegrationTest, [switch]$WallClippingIwadTest, [switch]$WallProjectionTest, [switch]$WallRenderIntegrationTest, [switch]$WallRenderIwadTest, [switch]$WallTextureTest, [switch]$WallTextureIntegrationTest, [switch]$WallTextureIwadTest, [switch]$PlaneTest, [switch]$PlaneIntegrationTest, [switch]$PlaneIwadTest, [switch]$M3ReleaseTest, [switch]$M3ReleaseIwadTest, [switch]$M3ReleaseBenchmark)
     if ([string]::IsNullOrWhiteSpace($CompilerPath)) {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest -M3ReleaseTest:$M3ReleaseTest -M3ReleaseIwadTest:$M3ReleaseIwadTest -M3ReleaseBenchmark:$M3ReleaseBenchmark
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest -M3ReleaseTest:$M3ReleaseTest -M3ReleaseIwadTest:$M3ReleaseIwadTest -M3ReleaseBenchmark:$M3ReleaseBenchmark -PlaneTest:$PlaneTest -PlaneIntegrationTest:$PlaneIntegrationTest -PlaneIwadTest:$PlaneIwadTest
     } else {
-        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest -M3ReleaseTest:$M3ReleaseTest -M3ReleaseIwadTest:$M3ReleaseIwadTest -M3ReleaseBenchmark:$M3ReleaseBenchmark -CompilerPath $CompilerPath
+        & $buildScript -Check:$Check -Test:$Test -LumpTest:$LumpTest -GraphicsTest:$GraphicsTest -DisplayTest:$DisplayTest -ResourceTest:$ResourceTest -TextureDefTest:$TextureDefTest -CompositeTest:$CompositeTest -FlatSpriteTest:$FlatSpriteTest -MapTypesTest:$MapTypesTest -MapLoaderTest:$MapLoaderTest -IntegrationTest:$IntegrationTest -FixedTest:$FixedTest -FixedIwadTest:$FixedIwadTest -GeometryTest:$GeometryTest -GeometryIntegrationTest:$GeometryIntegrationTest -GeometryIwadTest:$GeometryIwadTest -BspTest:$BspTest -BspIntegrationTest:$BspIntegrationTest -BspIwadTest:$BspIwadTest -WallClippingTest:$WallClippingTest -WallClippingIntegrationTest:$WallClippingIntegrationTest -WallClippingIwadTest:$WallClippingIwadTest -WallProjectionTest:$WallProjectionTest -WallRenderIntegrationTest:$WallRenderIntegrationTest -WallRenderIwadTest:$WallRenderIwadTest -WallTextureTest:$WallTextureTest -WallTextureIntegrationTest:$WallTextureIntegrationTest -WallTextureIwadTest:$WallTextureIwadTest -M3ReleaseTest:$M3ReleaseTest -M3ReleaseIwadTest:$M3ReleaseIwadTest -M3ReleaseBenchmark:$M3ReleaseBenchmark -PlaneTest:$PlaneTest -PlaneIntegrationTest:$PlaneIntegrationTest -PlaneIwadTest:$PlaneIwadTest -CompilerPath $CompilerPath
     }
     return $LASTEXITCODE
 }
@@ -833,6 +838,97 @@ Test-Condition ($m3ReleaseBenchmarkOutput -match 'allocations: warm total 13 obs
 Test-Condition ($m3ReleaseBenchmarkOutput -match 'No WADReadLump/AllocateMemory/TextureCompose appears in the per-column') "M3-07 BEN01 reports the static per-column draw-path audit"
 
 Write-Host ''
+Write-Host '== M4-01 visplane/real-flat unit test build =='
+$status = Invoke-BuildStep -Check -PlaneTest
+Test-Condition ($status -eq 0) "M4-01 plane unit test syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -PlaneTest
+Test-Condition ($status -eq 0) "M4-01 plane unit test build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $planeTestExe -PathType Leaf) "M4-01 plane unit test output exists: $planeTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $planeTestExe -PathType Leaf)) {
+    Write-Host 'Aborting: M4-01 plane unit test build failed.' -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M4-01 visplane/real-flat unit tests (PL01-PL60) =='
+$planeUnitOutput = & $planeTestExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M4-01 plane unit tests exit with 0 (got $status)"
+Test-Condition ($planeUnitOutput -match '(?m)^RESULT: PASS') "M4-01 PL01-PL60 reports PASS"
+Test-Condition ($planeUnitOutput -match 'Cases: 60, assertions: 211, failures: 0') "M4-01 unit suite runs 60 cases/211 assertions/0 failures"
+Test-Condition ($planeUnitOutput -match '\[PL01\]|CASE PL01:') "M4-01 unit suite actually executed PL01"
+Test-Condition ($planeUnitOutput -match '\[PL60\]|CASE PL60:') "M4-01 unit suite actually executed PL60"
+
+Write-Host ''
+Write-Host '== M4-01 synthetic combined wall+flat integration build =='
+$status = Invoke-BuildStep -Check -PlaneIntegrationTest
+Test-Condition ($status -eq 0) "M4-01 synthetic plane integration syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -PlaneIntegrationTest
+Test-Condition ($status -eq 0) "M4-01 synthetic plane integration build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $planeIntegrationTestExe -PathType Leaf) "M4-01 synthetic plane integration output exists: $planeIntegrationTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $planeIntegrationTestExe -PathType Leaf)) {
+    Write-Host 'Aborting: M4-01 synthetic plane integration build failed.' -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M4-01 synthetic combined wall+flat integration tests (PI01-PI03) =='
+$planeIntegrationOutput = & $planeIntegrationTestExe 2>&1 | Out-String
+$status = $LASTEXITCODE
+Test-Condition ($status -eq 0) "synthetic M4-01 plane integration tests exit with 0 (got $status)"
+Test-Condition ($planeIntegrationOutput -match '(?m)^RESULT: PASS') "M4-01 PI01-PI03 reports PASS"
+Test-Condition ($planeIntegrationOutput -match 'Cases: 3, assertions: 76, failures: 0') "M4-01 synthetic integration runs 3 cases/76 assertions/0 failures"
+Test-Condition ($planeIntegrationOutput -match 'CASE PI01:') "M4-01 synthetic integration actually executed PI01"
+Test-Condition ($planeIntegrationOutput -match 'CASE PI02:') "M4-01 synthetic integration actually executed PI02"
+Test-Condition ($planeIntegrationOutput -match 'CASE PI03:') "M4-01 synthetic integration actually executed PI03"
+
+Write-Host ''
+Write-Host '== M4-01 optional IWAD combined walls+flats integration build =='
+$status = Invoke-BuildStep -Check -PlaneIwadTest
+Test-Condition ($status -eq 0) "M4-01 optional IWAD plane integration syntax check exits with 0 (got $status)"
+$status = Invoke-BuildStep -PlaneIwadTest
+Test-Condition ($status -eq 0) "M4-01 optional IWAD plane integration build exits with 0 (got $status)"
+Test-Condition (Test-Path -LiteralPath $planeIwadTestExe -PathType Leaf) "M4-01 optional IWAD plane integration output exists: $planeIwadTestExe"
+if ($status -ne 0 -or -not (Test-Path -LiteralPath $planeIwadTestExe -PathType Leaf)) {
+    Write-Host 'Aborting: M4-01 optional IWAD plane integration build failed.' -ForegroundColor Red
+    exit 1
+}
+
+Write-Host ''
+Write-Host '== M4-01 optional IWAD combined walls+flats tests (PI04) =='
+if ([string]::IsNullOrWhiteSpace($IwadPath)) {
+    $planeIwadOutput = & $planeIwadTestExe 2>&1 | Out-String
+    $status = $LASTEXITCODE
+    Test-Condition ($status -eq 0) "optional M4-01 PI04 tests exit with 0 without a path (got $status)"
+    Test-Condition ($planeIwadOutput -match 'NOT RUN') "optional M4-01 PI04 tests report NOT RUN without a path"
+    Test-Condition ($planeIwadOutput -match 'Cases: 0, assertions: 0, failures: 0') "optional M4-01 PI04 no-argument mode is clean"
+} else {
+    Test-Condition (Test-Path -LiteralPath $IwadPath -PathType Leaf) "explicit owner IWAD path exists for M4-01"
+    if (Test-Path -LiteralPath $IwadPath -PathType Leaf) {
+        $planeIwadOutput = & $planeIwadTestExe $IwadPath 2>&1 | Out-String
+        $status = $LASTEXITCODE
+        Test-Condition ($status -eq 0) "optional M4-01 PI04 E1M1/E1M2/E4M1 integration exits with 0 (got $status)"
+        Test-Condition ($planeIwadOutput -match '(?m)^RESULT: PASS') "optional M4-01 PI04 reports PASS"
+        Test-Condition ($planeIwadOutput -match 'Cases: 1, assertions: 150, failures: 0') "M4-01 PI04 runs 1 case/150 assertions/0 failures"
+        Test-Condition ($planeIwadOutput -match 'matches known Ultimate Doom 1\.9ud identification 1') "M4-01 PI04 observed the known owner IWAD identity"
+        Test-Condition ($planeIwadOutput -match 'E1M1 new combined wall\+flat frame #1 succeeds') "optional M4-01 actually rendered E1M1 combined frame"
+        Test-Condition ($planeIwadOutput -match 'E1M2 new combined wall\+flat frame #1 succeeds') "optional M4-01 actually rendered E1M2 combined frame"
+        Test-Condition ($planeIwadOutput -match 'E4M1 new combined wall\+flat frame #1 succeeds') "optional M4-01 actually rendered E4M1 combined frame"
+        Test-Condition ($planeIwadOutput -match 'E1M1 frozen M3-04 span fingerprint 74B485154CE29B0B preserved') "optional M4-01 E1M1 M3-04 span hash preserved"
+        Test-Condition ($planeIwadOutput -match 'E1M2 frozen M3-04 span fingerprint 8AC0627513C4B619 preserved') "optional M4-01 E1M2 M3-04 span hash preserved"
+        Test-Condition ($planeIwadOutput -match 'E4M1 frozen M3-04 span fingerprint 9FD0B15A0F33197E preserved') "optional M4-01 E4M1 M3-04 span hash preserved"
+        Test-Condition ($planeIwadOutput -match 'E1M1 frozen M3-05 debug frame hash 4A923E4D357C7BD1 preserved') "optional M4-01 E1M1 M3-05 debug hash preserved"
+        Test-Condition ($planeIwadOutput -match 'E1M2 frozen M3-05 debug frame hash 0C9627E5C2FD8D35 preserved') "optional M4-01 E1M2 M3-05 debug hash preserved"
+        Test-Condition ($planeIwadOutput -match 'E4M1 frozen M3-05 debug frame hash 9AEB8BDD16834359 preserved') "optional M4-01 E4M1 M3-05 debug hash preserved"
+        Test-Condition ($planeIwadOutput -match 'E1M1 real FlatLoad 64x64 floor/ceiling pixels present') "optional M4-01 E1M1 real flats visible"
+        Test-Condition ($planeIwadOutput -match 'E1M2 real FlatLoad 64x64 floor/ceiling pixels present') "optional M4-01 E1M2 real flats visible"
+        Test-Condition ($planeIwadOutput -match 'E1M1 explicit 0/1 coverage marks resolve exactly') "optional M4-01 E1M1 coverage audit exact"
+        Test-Condition ($planeIwadOutput -match 'repeat combined full 64,000-byte frame identical') "optional M4-01 combined frames repeat byte-for-byte"
+        Test-Condition ($planeIwadOutput -match 'owner IWAD MD5 fingerprint unchanged after read-only pass') "optional M4-01 owner IWAD read-only MD5 unchanged"
+    }
+}
+
+Write-Host ''
 Write-Host '== Smoke tests =='
 
 $result = Invoke-DoomPB -Arguments @('--version')
@@ -844,6 +940,7 @@ Test-Condition ($result.ExitCode -eq 0) "--help exits with 0 (got $($result.Exit
 Test-Condition ($result.Output -match '(?m)^Usage:') "--help prints a usage line"
 Test-Condition ($result.Output -match '--version') "--help documents --version"
 Test-Condition ($result.Output -match '--help') "--help documents --help"
+Test-Condition ($result.Output -match '--show-planes') "--help documents --show-planes M4-01 preview"
 
 $result = Invoke-DoomPB -Arguments @()
 Test-Condition ($result.ExitCode -eq 0) 'startup without arguments exits with 0'
@@ -873,6 +970,30 @@ Test-Condition ($result.ExitCode -eq 1) "--show-title with a missing WAD exits w
 
 $result = Invoke-DoomPB -Arguments @('--dump-info', '--show-title')
 Test-Condition ($result.ExitCode -eq 2) "--dump-info and --show-title conflict exits with 2 (got $($result.ExitCode))"
+
+$result = Invoke-DoomPB -Arguments @('--show-planes')
+Test-Condition ($result.ExitCode -eq 2) "--show-planes without --iwad exits with 2 (got $($result.ExitCode))"
+Test-Condition ($result.Output -match 'requires') "--show-planes without --iwad produces a requirement diagnostic"
+
+$result = Invoke-DoomPB -Arguments @('--iwad', 'definitely-missing-doompb.wad', '--show-planes')
+Test-Condition ($result.ExitCode -eq 2) "--show-planes without a map name exits with 2 (got $($result.ExitCode))"
+Test-Condition ($result.Output -match 'requires a map name') "--show-planes without a map name produces a diagnostic"
+
+$result = Invoke-DoomPB -Arguments @('--iwad', 'definitely-missing-doompb.wad', '--show-planes', 'E1M1')
+Test-Condition ($result.ExitCode -eq 1) "--show-planes with a missing WAD exits with 1 (got $($result.ExitCode))"
+Test-Condition ($result.Output -match 'Cannot open WAD') "--show-planes with a missing WAD reports the WAD error"
+
+$result = Invoke-DoomPB -Arguments @('--show-planes', 'E1M1', '--show-walls', 'E1M1')
+Test-Condition ($result.ExitCode -eq 2) "--show-planes with --show-walls conflict exits with 2 (got $($result.ExitCode))"
+Test-Condition ($result.Output -match 'may be used') "--show-planes conflict produces the exclusivity diagnostic"
+
+$result = Invoke-DoomPB -Arguments @('--show-planes', 'E1M1', '--show-planes', 'E1M2')
+Test-Condition ($result.ExitCode -eq 2) "duplicate --show-planes exits with 2 (got $($result.ExitCode))"
+Test-Condition ($result.Output -match 'duplicate') "duplicate --show-planes produces the duplicate diagnostic"
+
+$result = Invoke-DoomPB -Arguments @('--show-planes', 'E1M1', 'extra')
+Test-Condition ($result.ExitCode -eq 2) "--show-planes with an extra argument exits with 2 (got $($result.ExitCode))"
+Test-Condition ($result.Output -match 'unknown option') "--show-planes extra argument produces the unknown-option diagnostic"
 
 if (-not [string]::IsNullOrWhiteSpace($IwadPath) -and (Test-Path -LiteralPath $IwadPath -PathType Leaf)) {
     Write-Host ''
